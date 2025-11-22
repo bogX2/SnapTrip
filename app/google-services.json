@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "361546836966",
+    "project_id": "snaptrip-53e51",
+    "storage_bucket": "snaptrip-53e51.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:361546836966:android:572b0f3fa0d690ed314427",
+        "android_client_info": {
+          "package_name": "com.example.snaptrip"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDIITOAT1ZWbD4OxghZfAPSqhxIg3VCGMg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
