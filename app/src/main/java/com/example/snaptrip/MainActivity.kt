@@ -21,16 +21,25 @@ import com.example.snaptrip.ui.LoginScreen
 import com.example.snaptrip.ui.MainPage
 import com.example.snaptrip.ui.theme.SnapTripTheme
 import com.example.snaptrip.viewmodel.AuthViewModel
+import com.example.snaptrip.ui.CreateTripScreen
+import com.google.android.libraries.places.api.Places // Importante
+import com.example.snaptrip.viewmodel.TripViewModel  // <--- AGGIUNGI QUESTO
+import com.example.snaptrip.ui.ItineraryScreen       // <--- AGGIUNGI QUESTO
+import com.example.snaptrip.BuildConfig
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 1. INIZIALIZZA PLACES (Prende la chiave dal Manifest)
+        if (!Places.isInitialized()) {
+            // USA BuildConfig INVECE DELLA STRINGA!
+            Places.initialize(applicationContext, BuildConfig.MAPS_API_KEY)
+        }
+
         setContent {
             SnapTripTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     SnapTripApp()
                 }
             }
@@ -43,11 +52,12 @@ fun SnapTripApp() {
     val navController = rememberNavController()
     val authViewModel: AuthViewModel = viewModel()
 
-    // Leggiamo lo stato dell'utente
+    // 1. ViewModel CONDIVISO (Creato qui una volta sola)
+    val tripViewModel: TripViewModel = viewModel()
+
     val user by authViewModel.user.collectAsState()
     val isLoading by authViewModel.isLoading.collectAsState()
 
-    // Se stiamo caricando lo stato iniziale (login check), mostriamo loading
     if (isLoading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -56,33 +66,44 @@ fun SnapTripApp() {
         val startDest = if (user != null) "main" else "login"
 
         NavHost(navController = navController, startDestination = startDest) {
-            
+
             composable("login") {
                 LoginScreen(
-                    //se il login ha successo andiamo alla schermata main
                     onLoginSuccess = {
-                        navController.navigate("main") {
-                            popUpTo("login") { inclusive = true }
-                        }
+                        navController.navigate("main") { popUpTo("login") { inclusive = true } }
                     },
                     viewModel = authViewModel
                 )
             }
 
             composable("main") {
-                // recupero del nome dell'utente per mostrarlo nella pagina di benvenuto
                 val userName = user?.name ?: "Traveler"
-                
                 MainPage(
                     userName = userName,
-                    onCreateTrip = { /*TODO*/ },
+                    onCreateTrip = {
+                        navController.navigate("create_trip")
+                    },
                     onViewHistory = { /*TODO*/ },
                     onLogout = {
                         authViewModel.logout()
-                        navController.navigate("login") {
-                            popUpTo("main") { inclusive = true }
-                        }
+                        navController.navigate("login") { popUpTo("main") { inclusive = true } }
                     }
+                )
+            }
+
+            // --- QUI C'È LA MAGIA ---
+            // Usiamo la rotta "create_trip" passando il viewModel condiviso
+            composable("create_trip") {
+                CreateTripScreen(
+                    navController = navController,
+                    viewModel = tripViewModel // <--- FONDAMENTALE!
+                )
+            }
+
+            composable("itinerary") {
+                ItineraryScreen(
+                    viewModel = tripViewModel, // <--- ANCHE QUI LO STESSO!
+                    onBack = { navController.popBackStack() }
                 )
             }
         }
