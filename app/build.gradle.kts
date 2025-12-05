@@ -4,15 +4,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     // Add the Google services Gradle plugin
     id("com.google.gms.google-services")
-
-
 }
 
 android {
     namespace = "com.example.snaptrip"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.snaptrip"
@@ -64,6 +60,9 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
+    
+    // Coil per caricare immagini da URL
+    implementation("io.coil-kt:coil-compose:2.4.0")
 
 
     testImplementation(libs.junit)

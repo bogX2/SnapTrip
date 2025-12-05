@@ -5,11 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -20,6 +18,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.snaptrip.ui.LoginScreen
+import com.example.snaptrip.ui.MainPage
 import com.example.snaptrip.ui.theme.SnapTripTheme
 import com.example.snaptrip.viewmodel.AuthViewModel
 
@@ -44,26 +43,25 @@ fun SnapTripApp() {
     val navController = rememberNavController()
     val authViewModel: AuthViewModel = viewModel()
 
-    // Leggiamo lo stato dell'utente SUBITO
+    // Leggiamo lo stato dell'utente
     val user by authViewModel.user.collectAsState()
     val isLoading by authViewModel.isLoading.collectAsState()
 
-    // Se stiamo ancora controllando se l'utente è loggato (all'avvio), mostriamo una rotellina
-    // Questo evita che il telefono impazzisca provando a caricare schermate a caso
+    // Se stiamo caricando lo stato iniziale (login check), mostriamo loading
     if (isLoading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
     } else {
-        // Decidiamo la destinazione iniziale in base allo stato
-        val startDest = if (user != null) "home" else "login"
+        val startDest = if (user != null) "main" else "login"
 
         NavHost(navController = navController, startDestination = startDest) {
-
+            
             composable("login") {
                 LoginScreen(
+                    //se il login ha successo andiamo alla schermata main
                     onLoginSuccess = {
-                        navController.navigate("home") {
+                        navController.navigate("main") {
                             popUpTo("login") { inclusive = true }
                         }
                     },
@@ -71,25 +69,22 @@ fun SnapTripApp() {
                 )
             }
 
-            composable("home") {
-                HomeScreen(
+            composable("main") {
+                // recupero del nome dell'utente per mostrarlo nella pagina di benvenuto
+                val userName = user?.name ?: "Traveler"
+                
+                MainPage(
+                    userName = userName,
+                    onCreateTrip = { /*TODO*/ },
+                    onViewHistory = { /*TODO*/ },
                     onLogout = {
                         authViewModel.logout()
                         navController.navigate("login") {
-                            popUpTo("home") { inclusive = true }
+                            popUpTo("main") { inclusive = true }
                         }
                     }
                 )
             }
-        }
-    }
-}
-
-@Composable
-fun HomeScreen(onLogout: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Button(onClick = onLogout) {
-            Text("Logout - Sei dentro (Home)!")
         }
     }
 }
