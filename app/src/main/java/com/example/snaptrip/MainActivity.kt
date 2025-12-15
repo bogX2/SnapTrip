@@ -26,6 +26,7 @@ import com.example.snaptrip.ui.CreateTripScreen
 import com.google.android.libraries.places.api.Places
 import com.example.snaptrip.viewmodel.TripViewModel
 import com.example.snaptrip.ui.ItineraryScreen
+import com.example.snaptrip.ui.TripListScreen // AGGIUNTO
 import com.example.snaptrip.BuildConfig
 
 class MainActivity : ComponentActivity() {
@@ -96,7 +97,9 @@ fun SnapTripApp() {
                         tripViewModel.clearResult()
                         navController.navigate("create_trip")
                     },
-                    onViewHistory = { /*TODO*/ },
+                    onViewHistory = { 
+                        navController.navigate("trip_list") 
+                    },
                     onLogout = {
                         authViewModel.logout()
                         navController.navigate("login") { popUpTo("main") { inclusive = true } }
@@ -111,12 +114,26 @@ fun SnapTripApp() {
                 )
             }
 
+            // NUOVA SCHERMATA: Lista Viaggi Salvati
+            composable("trip_list") {
+                TripListScreen(
+                    viewModel = tripViewModel,
+                    onBack = { navController.popBackStack() },
+                    onTripSelected = {
+                        navController.navigate("itinerary")
+                    }
+                )
+            }
+
             composable("itinerary") {
                 ItineraryScreen(
                     viewModel = tripViewModel,
                     onBack = {
                         // Quando torno indietro, resetto il risultato per evitare
-                        // che CreateTripScreen mi rimandi subito avanti
+                        // che CreateTripScreen mi rimandi subito avanti (se vengo da lì)
+                        // NOTA: Se vengo da TripList, questo reset potrebbe non essere necessario
+                        // ma male non fa, a meno che non voglio preservare lo stato.
+                        // Per ora, resetta tutto per sicurezza.
                         tripViewModel.clearResult()
                         navController.popBackStack()
                     }

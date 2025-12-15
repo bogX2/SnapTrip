@@ -1,5 +1,7 @@
 package com.example.snaptrip.viewmodel
 
+import android.graphics.Bitmap
+import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.snaptrip.data.model.TripRequest
@@ -9,6 +11,7 @@ import com.example.snaptrip.data.repository.TripRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.util.Collections
 
 class TripViewModel : ViewModel() {
@@ -23,13 +26,48 @@ class TripViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
-    // Stato del risultato (L'itinerario ricevuto!)
+    // Stato del risultato (L'itinerario corrente!)
     private val _tripResult = MutableStateFlow<TripResponse?>(null)
     val tripResult = _tripResult.asStateFlow()
 
     // Stato del salvataggio
     private val _saveSuccess = MutableStateFlow<Boolean>(false)
     val saveSuccess = _saveSuccess.asStateFlow()
+    
+    // Stato per la foto di copertina temporanea (Base64)
+    private val _coverPhotoBase64 = MutableStateFlow<String?>(null)
+    val coverPhotoBase64 = _coverPhotoBase64.asStateFlow()
+
+    // Stato per la lista dei viaggi salvati
+    private val _userTrips = MutableStateFlow<List<TripResponse>>(emptyList())
+    val userTrips = _userTrips.asStateFlow()
+
+    fun setCoverPhoto(bitmap: Bitmap) {
+        val outputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+        val byteArray = outputStream.toByteArray()
+        _coverPhotoBase64.value = Base64.encodeToString(byteArray, Base64.DEFAULT)
+    }
+
+    // Carica la lista dei viaggi dell'utente
+    fun loadUserTrips() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = repository.getUserTrips()
+            result.onSuccess { trips ->
+                _userTrips.value = trips
+            }
+            result.onFailure { e ->
+                _error.value = "Failed to load trips: ${e.message}"
+            }
+            _isLoading.value = false
+        }
+    }
+
+    // Seleziona un viaggio dalla lista per vederne i dettagli
+    fun selectTrip(trip: TripResponse) {
+        _tripResult.value = trip
+    }
 
     // Funzione chiamata dal tasto "Crea Viaggio"
     fun createTrip(name: String, days: String, hotel: String, places: List<String>) {
@@ -37,7 +75,6 @@ class TripViewModel : ViewModel() {
             _isLoading.value = true
             _error.value = null
 
-            // Validazione base
             if (name.isBlank() || hotel.isBlank() || places.isEmpty()) {
                 _error.value = "You should fill all the fields and add at least one place to visit"
                 _isLoading.value = false
@@ -47,7 +84,6 @@ class TripViewModel : ViewModel() {
             val daysInt = days.toIntOrNull() ?: 1
 
             try {
-                // Creiamo l'oggetto richiesta
                 val request = TripRequest(
                     trip_name = name,
                     days = daysInt,
@@ -55,13 +91,13 @@ class TripViewModel : ViewModel() {
                     places = places
                 )
 
-                // CHIAMATA AL SERVER PYTHON
                 val response = RetrofitClient.instance.createTrip(request)
 
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
                     if (body.status == "success") {
-                        _tripResult.value = body // Successo!
+                        body.coverPhoto = _coverPhotoBase64.value
+                        _tripResult.value = body 
                     } else {
                         _error.value = body.error ?: "Server Error"
                     }
@@ -101,31 +137,26 @@ class TripViewModel : ViewModel() {
         val currentItinerary = currentTrip.itinerary.toMutableList()
         val day = currentItinerary[dayIndex]
         
-        // Rimuoviamo il posto dalla lista del giorno specifico
         val newPlaces = day.places.toMutableList().apply {
             removeAt(placeIndex)
         }
         
-        // Aggiorniamo il giorno con la nuova lista
         currentItinerary[dayIndex] = day.copy(places = newPlaces)
-        
-        // Aggiorniamo lo stato
         _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
     }
 
     fun movePlaceUp(dayIndex: Int, placeIndex: Int) {
-        if (placeIndex <= 0) return // Già in cima
+        if (placeIndex <= 0) return
         swapPlaces(dayIndex, placeIndex, placeIndex - 1)
     }
 
     fun movePlaceDown(dayIndex: Int, placeIndex: Int) {
         val currentTrip = _tripResult.value ?: return
         val placesCount = currentTrip.itinerary[dayIndex].places.size
-        if (placeIndex >= placesCount - 1) return // Già in fondo
+        if (placeIndex >= placesCount - 1) return
         swapPlaces(dayIndex, placeIndex, placeIndex + 1)
     }
 
-    // NUOVA FUNZIONE PER IL DRAG & DROP
     fun reorderPlaces(dayIndex: Int, fromIndex: Int, toIndex: Int) {
         val currentTrip = _tripResult.value ?: return
         val currentItinerary = currentTrip.itinerary.toMutableList()
@@ -164,15 +195,12 @@ class TripViewModel : ViewModel() {
         val currentTrip = _tripResult.value ?: return
         val currentItinerary = currentTrip.itinerary.toMutableList()
         
-        // Prendiamo il posto dal giorno originale
         val fromDay = currentItinerary[fromDayIndex]
         val placeToMove = fromDay.places[placeIndex]
         
-        // Rimuoviamo dal vecchio giorno
         val newFromPlaces = fromDay.places.toMutableList().apply { removeAt(placeIndex) }
         currentItinerary[fromDayIndex] = fromDay.copy(places = newFromPlaces)
         
-        // Aggiungiamo al nuovo giorno (in fondo alla lista)
         val toDay = currentItinerary[toDayIndex]
         val newToPlaces = toDay.places.toMutableList().apply { add(placeToMove) }
         currentItinerary[toDayIndex] = toDay.copy(places = newToPlaces)
@@ -180,10 +208,10 @@ class TripViewModel : ViewModel() {
         _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
     }
 
-    // Reset per quando si esce dalla schermata
     fun clearResult() {
         _tripResult.value = null
         _error.value = null
         _saveSuccess.value = false
+        _coverPhotoBase64.value = null
     }
 }

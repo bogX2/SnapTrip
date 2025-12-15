@@ -1,5 +1,6 @@
 package com.example.snaptrip.data.repository
 
+import android.util.Log
 import com.example.snaptrip.data.model.TripResponse
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -15,15 +16,44 @@ class TripRepository {
         val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
 
         return try {
-            // Creiamo un documento con ID generato automaticamente dentro users/{userId}/trips
             val docRef = db.collection("users")
                 .document(userId)
                 .collection("trips")
                 .add(trip)
                 .await()
 
+            Log.d("TripRepository", "Trip saved with ID: ${docRef.id}")
             Result.success(docRef.id)
         } catch (e: Exception) {
+            Log.e("TripRepository", "Error saving trip", e)
+            Result.failure(e)
+        }
+    }
+
+    // Recupera la lista dei viaggi dell'utente corrente
+    suspend fun getUserTrips(): Result<List<TripResponse>> {
+        val userId = auth.currentUser?.uid
+        if (userId == null) {
+            Log.e("TripRepository", "getUserTrips: User not logged in")
+            return Result.failure(Exception("User not logged in"))
+        }
+
+        return try {
+            Log.d("TripRepository", "Fetching trips for user: $userId")
+            val snapshot = db.collection("users")
+                .document(userId)
+                .collection("trips")
+                .get()
+                .await()
+
+            Log.d("TripRepository", "Found ${snapshot.size()} documents")
+            
+            val trips = snapshot.toObjects(TripResponse::class.java)
+            Log.d("TripRepository", "Parsed ${trips.size} TripResponse objects")
+            
+            Result.success(trips)
+        } catch (e: Exception) {
+            Log.e("TripRepository", "Error getting trips", e)
             Result.failure(e)
         }
     }

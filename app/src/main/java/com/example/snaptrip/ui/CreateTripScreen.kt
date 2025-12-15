@@ -1,14 +1,26 @@
 package com.example.snaptrip.ui
 
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.launch
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddPhotoAlternate // Ora funziona
+import androidx.compose.material.icons.filled.CameraAlt // Ora funziona
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Place
@@ -16,7 +28,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -39,6 +54,35 @@ fun CreateTripScreen(
     // Stati UI Input
     var tripName by remember { mutableStateOf("") }
     var tripDays by remember { mutableStateOf("2") }
+
+    // Stati per la foto
+    var selectedImageBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+    // Launcher per la Galleria
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val bitmap = if (Build.VERSION.SDK_INT < 28) {
+                MediaStore.Images.Media.getBitmap(context.contentResolver, it)
+            } else {
+                val source = ImageDecoder.createSource(context.contentResolver, it)
+                ImageDecoder.decodeBitmap(source)
+            }
+            selectedImageBitmap = bitmap
+            viewModel.setCoverPhoto(bitmap)
+        }
+    }
+
+    // Launcher per la Fotocamera (Thumbnail)
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap: Bitmap? ->
+        if (bitmap != null) {
+            selectedImageBitmap = bitmap
+            viewModel.setCoverPhoto(bitmap)
+        }
+    }
 
     // Ricerca Hotel
     var hotelQuery by remember { mutableStateOf("") }
@@ -90,6 +134,59 @@ fun CreateTripScreen(
                     .padding(padding)
                     .padding(16.dp)
             ) {
+                // 0. SEZIONE FOTO DI COPERTINA
+                item {
+                    Text("Cover Photo", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(8.dp))
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (selectedImageBitmap != null) {
+                            Image(
+                                bitmap = selectedImageBitmap!!.asImageBitmap(),
+                                contentDescription = "Selected Cover",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                            // Pulsante per rimuovere/cambiare (sovrapposto)
+                            IconButton(
+                                onClick = { selectedImageBitmap = null },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
+                            ) {
+                                Icon(Icons.Default.Clear, null, tint = Color.White)
+                            }
+                        } else {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Add a cover photo for your trip", color = Color.Gray)
+                                Spacer(Modifier.height(16.dp))
+                                Row {
+                                    Button(onClick = { galleryLauncher.launch("image/*") }) {
+                                        Icon(Icons.Default.AddPhotoAlternate, null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Gallery")
+                                    }
+                                    Spacer(Modifier.width(16.dp))
+                                    Button(onClick = { cameraLauncher.launch() }) {
+                                        Icon(Icons.Default.CameraAlt, null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Camera")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(24.dp))
+                }
+
                 // 1. Nome e Giorni
                 item {
                     OutlinedTextField(

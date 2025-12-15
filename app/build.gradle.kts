@@ -68,6 +68,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
+    // AGGIUNTA: Libreria con tutte le icone Material
+    implementation("androidx.compose.material:material-icons-extended")
+
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.google.android.libraries.places:places:3.3.0")
@@ -86,7 +89,7 @@ dependencies {
     // Coil per caricare immagini da URL
     implementation("io.coil-kt:coil-compose:2.4.0")
 
-    // Reorderable List (Drag & Drop) - AGGIUNTO DI NUOVO
+    // Reorderable List (Drag & Drop)
     implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
 
 
