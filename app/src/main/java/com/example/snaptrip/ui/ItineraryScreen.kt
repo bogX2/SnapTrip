@@ -1,5 +1,7 @@
 package com.example.snaptrip.ui
 
+import android.widget.Toast
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -17,11 +19,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,7 +44,10 @@ fun ItineraryScreen(
     onBack: () -> Unit
 ) {
     val tripResult by viewModel.tripResult.collectAsState()
+    val saveSuccess by viewModel.saveSuccess.collectAsState()
+    val error by viewModel.error.collectAsState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     
     // Stato per la modalità Modifica
     var isEditing by remember { mutableStateOf(false) }
@@ -56,6 +63,20 @@ fun ItineraryScreen(
             MaterialTheme.colorScheme.surface
         )
     )
+
+    // Gestione feedback salvataggio
+    LaunchedEffect(saveSuccess) {
+        if (saveSuccess) {
+            Toast.makeText(context, "Trip saved successfully!", Toast.LENGTH_SHORT).show()
+            onBack() // Torniamo indietro dopo il salvataggio
+        }
+    }
+
+    LaunchedEffect(error) {
+        if (error != null) {
+            Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+        }
+    }
 
     if (showMoveDialog && tripResult != null) {
         AlertDialog(
@@ -119,7 +140,10 @@ fun ItineraryScreen(
         floatingActionButton = {
             if (!isEditing) {
                 ExtendedFloatingActionButton(
-                    onClick = { /* TODO: Save logic */ },
+                    onClick = { 
+                        // SALVATAGGIO SU FIREBASE
+                        viewModel.saveCurrentTrip() 
+                    },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = Color.White,
                     shape = RoundedCornerShape(20.dp)

@@ -5,12 +5,15 @@ import androidx.lifecycle.viewModelScope
 import com.example.snaptrip.data.model.TripRequest
 import com.example.snaptrip.data.model.TripResponse
 import com.example.snaptrip.data.remote.RetrofitClient
+import com.example.snaptrip.data.repository.TripRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.Collections
 
 class TripViewModel : ViewModel() {
+
+    private val repository = TripRepository()
 
     // Stato del caricamento (rotellina)
     private val _isLoading = MutableStateFlow(false)
@@ -23,6 +26,10 @@ class TripViewModel : ViewModel() {
     // Stato del risultato (L'itinerario ricevuto!)
     private val _tripResult = MutableStateFlow<TripResponse?>(null)
     val tripResult = _tripResult.asStateFlow()
+
+    // Stato del salvataggio
+    private val _saveSuccess = MutableStateFlow<Boolean>(false)
+    val saveSuccess = _saveSuccess.asStateFlow()
 
     // Funzione chiamata dal tasto "Crea Viaggio"
     fun createTrip(name: String, days: String, hotel: String, places: List<String>) {
@@ -67,6 +74,23 @@ class TripViewModel : ViewModel() {
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    // --- FUNZIONE SALVATAGGIO ---
+    fun saveCurrentTrip() {
+        val currentTrip = _tripResult.value ?: return
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = repository.saveTripToFirestore(currentTrip)
+            
+            result.onSuccess {
+                _saveSuccess.value = true
+            }
+            result.onFailure {
+                _error.value = "Errore salvataggio: ${it.message}"
+            }
+            _isLoading.value = false
         }
     }
 
@@ -160,5 +184,6 @@ class TripViewModel : ViewModel() {
     fun clearResult() {
         _tripResult.value = null
         _error.value = null
+        _saveSuccess.value = false
     }
 }

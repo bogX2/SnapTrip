@@ -92,6 +92,8 @@ fun SnapTripApp() {
                 MainPage(
                     userName = userName,
                     onCreateTrip = {
+                        // Reset del risultato precedente prima di crearne uno nuovo
+                        tripViewModel.clearResult()
                         navController.navigate("create_trip")
                     },
                     onViewHistory = { /*TODO*/ },
@@ -112,7 +114,12 @@ fun SnapTripApp() {
             composable("itinerary") {
                 ItineraryScreen(
                     viewModel = tripViewModel,
-                    onBack = { navController.popBackStack() }
+                    onBack = {
+                        // Quando torno indietro, resetto il risultato per evitare
+                        // che CreateTripScreen mi rimandi subito avanti
+                        tripViewModel.clearResult()
+                        navController.popBackStack()
+                    }
                 )
             }
         }
