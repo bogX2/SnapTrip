@@ -1,6 +1,7 @@
 package com.example.snaptrip
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -22,19 +23,29 @@ import com.example.snaptrip.ui.MainPage
 import com.example.snaptrip.ui.theme.SnapTripTheme
 import com.example.snaptrip.viewmodel.AuthViewModel
 import com.example.snaptrip.ui.CreateTripScreen
-import com.google.android.libraries.places.api.Places // Importante
-import com.example.snaptrip.viewmodel.TripViewModel  // <--- AGGIUNGI QUESTO
-import com.example.snaptrip.ui.ItineraryScreen       // <--- AGGIUNGI QUESTO
+import com.google.android.libraries.places.api.Places
+import com.example.snaptrip.viewmodel.TripViewModel
+import com.example.snaptrip.ui.ItineraryScreen
 import com.example.snaptrip.BuildConfig
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. INIZIALIZZA PLACES (Prende la chiave dal Manifest)
-        if (!Places.isInitialized()) {
-            // USA BuildConfig INVECE DELLA STRINGA!
-            Places.initialize(applicationContext, BuildConfig.MAPS_API_KEY)
+        try {
+            // Inizializzazione sicura di Google Places
+            if (!Places.isInitialized()) {
+                val apiKey = BuildConfig.MAPS_API_KEY
+                if (apiKey.isNullOrBlank() || apiKey == "null") {
+                    // Evita il crash se la chiave manca
+                    Toast.makeText(this, "Maps API Key mancante! Configura local.properties", Toast.LENGTH_LONG).show()
+                } else {
+                    Places.initialize(applicationContext, apiKey)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Errore init Places: ${e.message}", Toast.LENGTH_LONG).show()
         }
 
         setContent {
@@ -52,7 +63,7 @@ fun SnapTripApp() {
     val navController = rememberNavController()
     val authViewModel: AuthViewModel = viewModel()
 
-    // 1. ViewModel CONDIVISO (Creato qui una volta sola)
+    // ViewModel CONDIVISO per il viaggio
     val tripViewModel: TripViewModel = viewModel()
 
     val user by authViewModel.user.collectAsState()
@@ -91,18 +102,16 @@ fun SnapTripApp() {
                 )
             }
 
-            // --- QUI C'È LA MAGIA ---
-            // Usiamo la rotta "create_trip" passando il viewModel condiviso
             composable("create_trip") {
                 CreateTripScreen(
                     navController = navController,
-                    viewModel = tripViewModel // <--- FONDAMENTALE!
+                    viewModel = tripViewModel
                 )
             }
 
             composable("itinerary") {
                 ItineraryScreen(
-                    viewModel = tripViewModel, // <--- ANCHE QUI LO STESSO!
+                    viewModel = tripViewModel,
                     onBack = { navController.popBackStack() }
                 )
             }

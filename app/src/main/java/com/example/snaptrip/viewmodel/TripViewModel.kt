@@ -8,6 +8,7 @@ import com.example.snaptrip.data.remote.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.Collections
 
 class TripViewModel : ViewModel() {
 
@@ -31,7 +32,7 @@ class TripViewModel : ViewModel() {
 
             // Validazione base
             if (name.isBlank() || hotel.isBlank() || places.isEmpty()) {
-                _error.value = "Compila tutti i campi e aggiungi almeno un luogo."
+                _error.value = "You should fill all the fields and add at least one place to visit"
                 _isLoading.value = false
                 return@launch
             }
@@ -55,7 +56,7 @@ class TripViewModel : ViewModel() {
                     if (body.status == "success") {
                         _tripResult.value = body // Successo!
                     } else {
-                        _error.value = body.error ?: "Errore sconosciuto dal server"
+                        _error.value = body.error ?: "Server Error"
                     }
                 } else {
                     _error.value = "Errore server: ${response.code()}"
@@ -67,6 +68,92 @@ class TripViewModel : ViewModel() {
                 _isLoading.value = false
             }
         }
+    }
+
+    // --- FUNZIONI DI MODIFICA ITINERARIO ---
+
+    fun removePlace(dayIndex: Int, placeIndex: Int) {
+        val currentTrip = _tripResult.value ?: return
+        val currentItinerary = currentTrip.itinerary.toMutableList()
+        val day = currentItinerary[dayIndex]
+        
+        // Rimuoviamo il posto dalla lista del giorno specifico
+        val newPlaces = day.places.toMutableList().apply {
+            removeAt(placeIndex)
+        }
+        
+        // Aggiorniamo il giorno con la nuova lista
+        currentItinerary[dayIndex] = day.copy(places = newPlaces)
+        
+        // Aggiorniamo lo stato
+        _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
+    }
+
+    fun movePlaceUp(dayIndex: Int, placeIndex: Int) {
+        if (placeIndex <= 0) return // Già in cima
+        swapPlaces(dayIndex, placeIndex, placeIndex - 1)
+    }
+
+    fun movePlaceDown(dayIndex: Int, placeIndex: Int) {
+        val currentTrip = _tripResult.value ?: return
+        val placesCount = currentTrip.itinerary[dayIndex].places.size
+        if (placeIndex >= placesCount - 1) return // Già in fondo
+        swapPlaces(dayIndex, placeIndex, placeIndex + 1)
+    }
+
+    // NUOVA FUNZIONE PER IL DRAG & DROP
+    fun reorderPlaces(dayIndex: Int, fromIndex: Int, toIndex: Int) {
+        val currentTrip = _tripResult.value ?: return
+        val currentItinerary = currentTrip.itinerary.toMutableList()
+        val day = currentItinerary[dayIndex]
+        val newPlaces = day.places.toMutableList()
+
+        if (fromIndex < toIndex) {
+            for (i in fromIndex until toIndex) {
+                Collections.swap(newPlaces, i, i + 1)
+            }
+        } else {
+            for (i in fromIndex downTo toIndex + 1) {
+                Collections.swap(newPlaces, i, i - 1)
+            }
+        }
+
+        currentItinerary[dayIndex] = day.copy(places = newPlaces)
+        _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
+    }
+
+    private fun swapPlaces(dayIndex: Int, indexA: Int, indexB: Int) {
+        val currentTrip = _tripResult.value ?: return
+        val currentItinerary = currentTrip.itinerary.toMutableList()
+        val day = currentItinerary[dayIndex]
+        
+        val newPlaces = day.places.toMutableList()
+        val temp = newPlaces[indexA]
+        newPlaces[indexA] = newPlaces[indexB]
+        newPlaces[indexB] = temp
+        
+        currentItinerary[dayIndex] = day.copy(places = newPlaces)
+        _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
+    }
+
+    fun movePlaceToDay(fromDayIndex: Int, placeIndex: Int, toDayIndex: Int) {
+        val currentTrip = _tripResult.value ?: return
+        val currentItinerary = currentTrip.itinerary.toMutableList()
+        
+        // Prendiamo il posto dal giorno originale
+        val fromDay = currentItinerary[fromDayIndex]
+        val placeToMove = fromDay.places[placeIndex]
+        
+        // Rimuoviamo dal vecchio giorno
+        val newFromPlaces = fromDay.places.toMutableList().apply { removeAt(placeIndex) }
+        currentItinerary[fromDayIndex] = fromDay.copy(places = newFromPlaces)
+        
+        // Aggiungiamo al nuovo giorno (in fondo alla lista)
+        val toDay = currentItinerary[toDayIndex]
+        val newToPlaces = toDay.places.toMutableList().apply { add(placeToMove) }
+        currentItinerary[toDayIndex] = toDay.copy(places = newToPlaces)
+        
+        _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
     }
 
     // Reset per quando si esce dalla schermata

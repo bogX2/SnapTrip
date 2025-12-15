@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -116,19 +117,24 @@ fun CreateTripScreen(
                         }
                     )
                     if (isSearchingHotel && hotelPredictions.isNotEmpty()) {
-                        Column(Modifier.background(Color.White)) {
-                            hotelPredictions.take(3).forEach { prediction ->
-                                Text(
-                                    text = prediction,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            hotelQuery = prediction
-                                            isSearchingHotel = false
-                                        }
-                                        .padding(16.dp)
-                                )
-                                Divider()
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            elevation = CardDefaults.cardElevation(4.dp)
+                        ) {
+                            Column(Modifier.background(Color.White)) {
+                                hotelPredictions.take(3).forEach { prediction ->
+                                    Text(
+                                        text = prediction,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                hotelQuery = prediction
+                                                isSearchingHotel = false
+                                            }
+                                            .padding(16.dp)
+                                    )
+                                    Divider()
+                                }
                             }
                         }
                     }
@@ -149,7 +155,9 @@ fun CreateTripScreen(
                         trailingIcon = {
                             IconButton(onClick = {
                                 if (placeQuery.isNotBlank()) {
-                                    selectedPlaces = selectedPlaces + placeQuery
+                                    if (!selectedPlaces.contains(placeQuery)) {
+                                        selectedPlaces = selectedPlaces + placeQuery
+                                    }
                                     placeQuery = ""
                                     placePredictions = emptyList()
                                 }
@@ -157,34 +165,65 @@ fun CreateTripScreen(
                         }
                     )
                     if (placePredictions.isNotEmpty()) {
-                        Column(Modifier.background(Color.White)) {
-                            placePredictions.take(3).forEach { prediction ->
-                                Text(
-                                    text = prediction,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            selectedPlaces = selectedPlaces + prediction
-                                            placeQuery = ""
-                                            placePredictions = emptyList()
-                                        }
-                                        .padding(16.dp)
-                                )
-                                Divider()
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            elevation = CardDefaults.cardElevation(4.dp)
+                        ) {
+                            Column(Modifier.background(Color.White)) {
+                                placePredictions.take(3).forEach { prediction ->
+                                    Text(
+                                        text = prediction,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                if (!selectedPlaces.contains(prediction)) {
+                                                    selectedPlaces = selectedPlaces + prediction
+                                                }
+                                                placeQuery = ""
+                                                placePredictions = emptyList()
+                                            }
+                                            .padding(16.dp)
+                                    )
+                                    Divider()
+                                }
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                // 4. Lista selezionati
+                // 4. Lista posti selezionati
                 items(selectedPlaces) { place ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
                     ) {
-                        Text("• $place")
-                        IconButton(onClick = { selectedPlaces = selectedPlaces - place }) {
-                            Icon(Icons.Default.Delete, null, tint = Color.Red)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = place,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            IconButton(onClick = { selectedPlaces = selectedPlaces - place }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Remove",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                 }

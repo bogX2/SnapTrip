@@ -86,6 +86,9 @@ dependencies {
     // Coil per caricare immagini da URL
     implementation("io.coil-kt:coil-compose:2.4.0")
 
+    // Reorderable List (Drag & Drop) - AGGIUNTO DI NUOVO
+    implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
+
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
