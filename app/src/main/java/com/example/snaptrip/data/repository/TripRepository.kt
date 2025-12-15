@@ -16,14 +16,23 @@ class TripRepository {
         val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
 
         return try {
-            val docRef = db.collection("users")
+            val tripsCollection = db.collection("users")
                 .document(userId)
                 .collection("trips")
-                .add(trip)
-                .await()
 
-            Log.d("TripRepository", "Trip saved with ID: ${docRef.id}")
-            Result.success(docRef.id)
+            // Se abbiamo già un ID, aggiorniamo il documento esistente
+            if (trip.firestoreId != null) {
+                Log.d("TripRepository", "Updating existing trip: ${trip.firestoreId}")
+                tripsCollection.document(trip.firestoreId!!).set(trip).await()
+                Result.success(trip.firestoreId!!)
+            } else {
+                // Altrimenti creiamo un nuovo documento
+                Log.d("TripRepository", "Creating new trip")
+                val docRef = tripsCollection.add(trip).await()
+                // Aggiorniamo l'oggetto locale con il nuovo ID
+                trip.firestoreId = docRef.id
+                Result.success(docRef.id)
+            }
         } catch (e: Exception) {
             Log.e("TripRepository", "Error saving trip", e)
             Result.failure(e)
@@ -48,7 +57,13 @@ class TripRepository {
 
             Log.d("TripRepository", "Found ${snapshot.size()} documents")
             
-            val trips = snapshot.toObjects(TripResponse::class.java)
+            // Convertiamo i documenti in oggetti e salviamo l'ID del documento
+            val trips = snapshot.documents.mapNotNull { doc ->
+                val trip = doc.toObject(TripResponse::class.java)
+                trip?.firestoreId = doc.id // Salviamo l'ID per futuri update
+                trip
+            }
+            
             Log.d("TripRepository", "Parsed ${trips.size} TripResponse objects")
             
             Result.success(trips)

@@ -2,6 +2,7 @@ package com.example.snaptrip.data.model
 
 import com.google.gson.annotations.SerializedName
 import com.google.firebase.firestore.PropertyName
+import com.google.firebase.firestore.Exclude
 
 // Richiesta da inviare al server
 data class TripRequest(
@@ -12,24 +13,27 @@ data class TripRequest(
 )
 
 // Risposta dal server e oggetto salvato su Firestore
-// Usiamo var e valori di default per garantire la compatibilità con Firestore
 data class TripResponse(
     var status: String = "",
     var trip_name: String = "",
     var weather: WeatherInfo? = null,
-    var itinerary: List<DayItinerary> = ArrayList(), // Usa ArrayList per compatibilità
+    var itinerary: List<DayItinerary> = ArrayList(),
     var error: String? = null,
-    var coverPhoto: String? = null
+    var coverPhoto: String? = null,
+    
+    // Campo per tracciare l'ID del documento Firestore (non viene dal server Python)
+    // @Exclude impedisce a Firestore di scrivere questo campo nel JSON del DB,
+    // ma noi lo useremo localmente per sapere quale documento aggiornare.
+    @get:Exclude var firestoreId: String? = null
 ) {
-    // Costruttore vuoto esplicito necessario per Firestore se il default non venisse rilevato
-    constructor() : this("", "", null, ArrayList(), null, null)
+    constructor() : this("", "", null, ArrayList(), null, null, null)
 }
 
 data class WeatherInfo(
     var temp: Int = 0,
     var description: String = "",
     @SerializedName("icon_code") 
-    @get:PropertyName("icon_code") // Forza il nome anche su Firestore se necessario
+    @get:PropertyName("icon_code")
     var iconCode: String = ""
 ) {
     constructor() : this(0, "", "")
