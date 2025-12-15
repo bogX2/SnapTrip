@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -62,10 +63,16 @@ fun TripListScreen(
                 modifier = Modifier.padding(padding)
             ) {
                 items(trips) { trip ->
-                    TripItem(trip) {
-                        viewModel.selectTrip(trip)
-                        onTripSelected()
-                    }
+                    TripItem(
+                        trip = trip,
+                        onClick = {
+                            viewModel.selectTrip(trip)
+                            onTripSelected()
+                        },
+                        onDelete = {
+                            viewModel.deleteTrip(trip)
+                        }
+                    )
                 }
             }
         }
@@ -73,7 +80,37 @@ fun TripListScreen(
 }
 
 @Composable
-fun TripItem(trip: TripResponse, onClick: () -> Unit) {
+fun TripItem(
+    trip: TripResponse, 
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Trip") },
+            text = { Text("Are you sure you want to delete '${trip.trip_name}'? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete()
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Card(
         onClick = onClick,
         elevation = CardDefaults.cardElevation(4.dp),
@@ -82,7 +119,6 @@ fun TripItem(trip: TripResponse, onClick: () -> Unit) {
         Box(Modifier.fillMaxSize()) {
             // Immagine di copertina
             if (trip.coverPhoto != null) {
-                // Decodifica sicura fuori dal blocco UI usando remember
                 val bitmap = remember(trip.coverPhoto) {
                     try {
                         val imageBytes = android.util.Base64.decode(trip.coverPhoto, android.util.Base64.DEFAULT)
@@ -100,11 +136,9 @@ fun TripItem(trip: TripResponse, onClick: () -> Unit) {
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    // Fallback se la decodifica fallisce o ritorna null
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer))
                 }
             } else {
-                // Placeholder o colore solido se non c'è foto
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer))
             }
             
@@ -116,6 +150,20 @@ fun TripItem(trip: TripResponse, onClick: () -> Unit) {
                         colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
                     ))
             )
+
+            // Pulsante Cancella (in alto a destra)
+            IconButton(
+                onClick = { showDeleteDialog = true },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete Trip",
+                    tint = Color.White
+                )
+            }
 
             // Info Viaggio
             Column(

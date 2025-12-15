@@ -72,4 +72,24 @@ class TripRepository {
             Result.failure(e)
         }
     }
+
+    // Elimina un viaggio specifico
+    suspend fun deleteTrip(tripId: String): Result<Unit> {
+        val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
+
+        return try {
+            db.collection("users")
+                .document(userId)
+                .collection("trips")
+                .document(tripId)
+                .delete()
+                .await()
+            
+            Log.d("TripRepository", "Trip deleted: $tripId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("TripRepository", "Error deleting trip", e)
+            Result.failure(e)
+        }
+    }
 }

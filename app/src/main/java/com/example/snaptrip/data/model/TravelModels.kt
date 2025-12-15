@@ -20,10 +20,9 @@ data class TripResponse(
     var itinerary: List<DayItinerary> = ArrayList(),
     var error: String? = null,
     var coverPhoto: String? = null,
-    
-    // Campo per tracciare l'ID del documento Firestore (non viene dal server Python)
-    // @Exclude impedisce a Firestore di scrivere questo campo nel JSON del DB,
-    // ma noi lo useremo localmente per sapere quale documento aggiornare.
+
+
+    //campo che contiene l'id del documento su Firestore che indica il viaggio
     @get:Exclude var firestoreId: String? = null
 ) {
     constructor() : this("", "", null, ArrayList(), null, null, null)

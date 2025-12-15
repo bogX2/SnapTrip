@@ -130,6 +130,24 @@ class TripViewModel : ViewModel() {
         }
     }
 
+    // --- FUNZIONE ELIMINAZIONE ---
+    fun deleteTrip(trip: TripResponse) {
+        val tripId = trip.firestoreId ?: return
+        viewModelScope.launch {
+            _isLoading.value = true
+            val result = repository.deleteTrip(tripId)
+            
+            result.onSuccess {
+                // Rimuove il viaggio dalla lista locale per aggiornare la UI
+                _userTrips.value = _userTrips.value.filter { it.firestoreId != tripId }
+            }
+            result.onFailure {
+                _error.value = "Failed to delete trip: ${it.message}"
+            }
+            _isLoading.value = false
+        }
+    }
+
     // --- FUNZIONI DI MODIFICA ITINERARIO ---
 
     fun removePlace(dayIndex: Int, placeIndex: Int) {
