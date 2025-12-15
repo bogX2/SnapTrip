@@ -26,7 +26,8 @@ import com.example.snaptrip.ui.CreateTripScreen
 import com.google.android.libraries.places.api.Places
 import com.example.snaptrip.viewmodel.TripViewModel
 import com.example.snaptrip.ui.ItineraryScreen
-import com.example.snaptrip.ui.TripListScreen // AGGIUNTO
+import com.example.snaptrip.ui.TripListScreen
+import com.example.snaptrip.ui.TravelJournalScreen // AGGIUNTO
 import com.example.snaptrip.BuildConfig
 
 class MainActivity : ComponentActivity() {
@@ -114,13 +115,20 @@ fun SnapTripApp() {
                 )
             }
 
-            // NUOVA SCHERMATA: Lista Viaggi Salvati
+            // LISTA VIAGGI
             composable("trip_list") {
                 TripListScreen(
                     viewModel = tripViewModel,
                     onBack = { navController.popBackStack() },
                     onTripSelected = {
                         navController.navigate("itinerary")
+                    },
+                    onOpenJournal = { trip ->
+                        // Passiamo l'ID e il nome del viaggio come argomenti o tramite VM se preferisci
+                        // Per semplicità qui navighiamo e il VM ha già il viaggio selezionato? 
+                        // No, TripListScreen non seleziona il viaggio quando clicchi "Journal", quindi lo passiamo qui
+                        tripViewModel.selectTrip(trip)
+                        navController.navigate("journal")
                     }
                 )
             }
@@ -129,15 +137,30 @@ fun SnapTripApp() {
                 ItineraryScreen(
                     viewModel = tripViewModel,
                     onBack = {
-                        // Quando torno indietro, resetto il risultato per evitare
-                        // che CreateTripScreen mi rimandi subito avanti (se vengo da lì)
-                        // NOTA: Se vengo da TripList, questo reset potrebbe non essere necessario
-                        // ma male non fa, a meno che non voglio preservare lo stato.
-                        // Per ora, resetta tutto per sicurezza.
                         tripViewModel.clearResult()
                         navController.popBackStack()
                     }
                 )
+            }
+            
+            // NUOVO: TRAVEL JOURNAL
+            composable("journal") {
+                // Recuperiamo il viaggio selezionato dal ViewModel
+                val selectedTrip = tripViewModel.tripResult.collectAsState().value
+                
+                if (selectedTrip != null && selectedTrip.firestoreId != null) {
+                    TravelJournalScreen(
+                        viewModel = tripViewModel,
+                        tripId = selectedTrip.firestoreId!!,
+                        tripName = selectedTrip.trip_name,
+                        onBack = { navController.popBackStack() }
+                    )
+                } else {
+                    // Fallback se qualcosa va storto
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        androidx.compose.material3.Text("No trip selected")
+                    }
+                }
             }
         }
     }

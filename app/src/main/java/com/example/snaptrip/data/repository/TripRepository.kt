@@ -1,9 +1,11 @@
 package com.example.snaptrip.data.repository
 
 import android.util.Log
+import com.example.snaptrip.data.model.JournalEntry
 import com.example.snaptrip.data.model.TripResponse
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
 
 class TripRepository {
@@ -89,6 +91,39 @@ class TripRepository {
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("TripRepository", "Error deleting trip", e)
+            Result.failure(e)
+        }
+    }
+
+    // --- FUNZIONI DIARIO ---
+
+    suspend fun getJournalEntries(tripId: String): Result<List<JournalEntry>> {
+        val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
+        return try {
+            val snapshot = db.collection("users").document(userId)
+                .collection("trips").document(tripId)
+                .collection("journal")
+                .orderBy("date", Query.Direction.DESCENDING)
+                .get().await()
+
+            val entries = snapshot.documents.mapNotNull { doc ->
+                doc.toObject(JournalEntry::class.java)?.apply { firestoreId = doc.id }
+            }
+            Result.success(entries)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun saveJournalEntry(tripId: String, entry: JournalEntry): Result<Unit> {
+        val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
+        return try {
+            db.collection("users").document(userId)
+                .collection("trips").document(tripId)
+                .collection("journal")
+                .add(entry).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
             Result.failure(e)
         }
     }

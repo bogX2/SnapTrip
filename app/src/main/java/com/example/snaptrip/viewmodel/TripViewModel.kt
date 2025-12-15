@@ -1,9 +1,16 @@
 package com.example.snaptrip.viewmodel
 
+import android.app.Application
+import android.content.Context
 import android.graphics.Bitmap
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.util.Base64
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.snaptrip.data.model.JournalEntry
 import com.example.snaptrip.data.model.TripRequest
 import com.example.snaptrip.data.model.TripResponse
 import com.example.snaptrip.data.remote.RetrofitClient
@@ -14,34 +21,96 @@ import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.util.Collections
 
-class TripViewModel : ViewModel() {
+class TripViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
     private val repository = TripRepository()
+    private val sensorManager = application.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private var stepSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
 
-    // Stato del caricamento (rotellina)
+    // Stati generali
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
-    // Stato dell'errore (messaggio rosso)
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
-    // Stato del risultato (L'itinerario corrente!)
     private val _tripResult = MutableStateFlow<TripResponse?>(null)
     val tripResult = _tripResult.asStateFlow()
 
-    // Stato del salvataggio
     private val _saveSuccess = MutableStateFlow<Boolean>(false)
     val saveSuccess = _saveSuccess.asStateFlow()
     
-    // Stato per la foto di copertina temporanea (Base64)
     private val _coverPhotoBase64 = MutableStateFlow<String?>(null)
     val coverPhotoBase64 = _coverPhotoBase64.asStateFlow()
 
-    // Stato per la lista dei viaggi salvati
     private val _userTrips = MutableStateFlow<List<TripResponse>>(emptyList())
     val userTrips = _userTrips.asStateFlow()
 
+    // Stati per il Diario
+    private val _journalEntries = MutableStateFlow<List<JournalEntry>>(emptyList())
+    val journalEntries = _journalEntries.asStateFlow()
+
+    // Stati per Contapassi e Meteo
+    private val _steps = MutableStateFlow(0)
+    val steps = _steps.asStateFlow()
+    
+    private val _weatherTemp = MutableStateFlow(25) // Temp fittizia
+    val weatherTemp = _weatherTemp.asStateFlow()
+
+    init {
+        startStepCounter()
+    }
+
+    // --- CONTAPASSI ---
+    private fun startStepCounter() {
+        stepSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        event?.let {
+            // Il sensore step counter restituisce i passi totali dall'ultimo riavvio del dispositivo.
+            // Per un'app reale bisognerebbe salvare l'offset giornaliero. Qui mostriamo il raw value per demo.
+            _steps.value = it.values[0].toInt()
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    override fun onCleared() {
+        super.onCleared()
+        sensorManager.unregisterListener(this)
+    }
+
+    // --- DIARIO ---
+    fun loadJournal(tripId: String) {
+        viewModelScope.launch {
+            val result = repository.getJournalEntries(tripId)
+            result.onSuccess { _journalEntries.value = it }
+        }
+    }
+
+    fun addJournalEntry(tripId: String, text: String, photo: Bitmap?) {
+        viewModelScope.launch {
+            var photoBase64: String? = null
+            if (photo != null) {
+                val outputStream = ByteArrayOutputStream()
+                photo.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+                photoBase64 = Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
+            }
+
+            val entry = JournalEntry(text = text, photoBase64 = photoBase64)
+            val result = repository.saveJournalEntry(tripId, entry)
+            
+            if (result.isSuccess) {
+                loadJournal(tripId) // Ricarica la lista
+            }
+        }
+    }
+
+    // --- ALTRE FUNZIONI ESISTENTI (Invariate) ---
+    
     fun setCoverPhoto(bitmap: Bitmap) {
         val outputStream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
@@ -49,34 +118,27 @@ class TripViewModel : ViewModel() {
         _coverPhotoBase64.value = Base64.encodeToString(byteArray, Base64.DEFAULT)
     }
 
-    // Carica la lista dei viaggi dell'utente
     fun loadUserTrips() {
         viewModelScope.launch {
             _isLoading.value = true
             val result = repository.getUserTrips()
-            result.onSuccess { trips ->
-                _userTrips.value = trips
-            }
-            result.onFailure { e ->
-                _error.value = "Failed to load trips: ${e.message}"
-            }
+            result.onSuccess { _userTrips.value = it }
+            result.onFailure { _error.value = "Failed to load trips: ${it.message}" }
             _isLoading.value = false
         }
     }
 
-    // Seleziona un viaggio dalla lista per vederne i dettagli
     fun selectTrip(trip: TripResponse) {
         _tripResult.value = trip
     }
 
-    // Funzione chiamata dal tasto "Crea Viaggio"
     fun createTrip(name: String, days: String, hotel: String, places: List<String>) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
 
             if (name.isBlank() || hotel.isBlank() || places.isEmpty()) {
-                _error.value = "You should fill all the fields and add at least one place to visit"
+                _error.value = "You should fill all the fields"
                 _isLoading.value = false
                 return@launch
             }
@@ -84,13 +146,7 @@ class TripViewModel : ViewModel() {
             val daysInt = days.toIntOrNull() ?: 1
 
             try {
-                val request = TripRequest(
-                    trip_name = name,
-                    days = daysInt,
-                    hotel = hotel,
-                    places = places
-                )
-
+                val request = TripRequest(name, daysInt, hotel, places)
                 val response = RetrofitClient.instance.createTrip(request)
 
                 if (response.isSuccessful && response.body() != null) {
@@ -106,59 +162,43 @@ class TripViewModel : ViewModel() {
                 }
 
             } catch (e: Exception) {
-                _error.value = "Errore di connessione: ${e.message}"
+                _error.value = "Errore: ${e.message}"
             } finally {
                 _isLoading.value = false
             }
         }
     }
 
-    // --- FUNZIONE SALVATAGGIO ---
     fun saveCurrentTrip() {
         val currentTrip = _tripResult.value ?: return
         viewModelScope.launch {
             _isLoading.value = true
             val result = repository.saveTripToFirestore(currentTrip)
-            
-            result.onSuccess {
-                _saveSuccess.value = true
-            }
-            result.onFailure {
-                _error.value = "Errore salvataggio: ${it.message}"
-            }
+            result.onSuccess { _saveSuccess.value = true }
+            result.onFailure { _error.value = "Errore salvataggio: ${it.message}" }
             _isLoading.value = false
         }
     }
 
-    // --- FUNZIONE ELIMINAZIONE ---
     fun deleteTrip(trip: TripResponse) {
         val tripId = trip.firestoreId ?: return
         viewModelScope.launch {
             _isLoading.value = true
             val result = repository.deleteTrip(tripId)
-            
-            result.onSuccess {
-                // Rimuove il viaggio dalla lista locale per aggiornare la UI
+            result.onSuccess { 
                 _userTrips.value = _userTrips.value.filter { it.firestoreId != tripId }
             }
-            result.onFailure {
-                _error.value = "Failed to delete trip: ${it.message}"
-            }
+            result.onFailure { _error.value = "Failed to delete: ${it.message}" }
             _isLoading.value = false
         }
     }
-
-    // --- FUNZIONI DI MODIFICA ITINERARIO ---
 
     fun removePlace(dayIndex: Int, placeIndex: Int) {
         val currentTrip = _tripResult.value ?: return
         val currentItinerary = currentTrip.itinerary.toMutableList()
         val day = currentItinerary[dayIndex]
         
-        val newPlaces = day.places.toMutableList().apply {
-            removeAt(placeIndex)
-        }
-        
+        val newPlaces = day.places.toMutableList().apply { removeAt(placeIndex) }
         currentItinerary[dayIndex] = day.copy(places = newPlaces)
         _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
     }
@@ -182,13 +222,9 @@ class TripViewModel : ViewModel() {
         val newPlaces = day.places.toMutableList()
 
         if (fromIndex < toIndex) {
-            for (i in fromIndex until toIndex) {
-                Collections.swap(newPlaces, i, i + 1)
-            }
+            for (i in fromIndex until toIndex) Collections.swap(newPlaces, i, i + 1)
         } else {
-            for (i in fromIndex downTo toIndex + 1) {
-                Collections.swap(newPlaces, i, i - 1)
-            }
+            for (i in fromIndex downTo toIndex + 1) Collections.swap(newPlaces, i, i - 1)
         }
 
         currentItinerary[dayIndex] = day.copy(places = newPlaces)
@@ -199,12 +235,10 @@ class TripViewModel : ViewModel() {
         val currentTrip = _tripResult.value ?: return
         val currentItinerary = currentTrip.itinerary.toMutableList()
         val day = currentItinerary[dayIndex]
-        
         val newPlaces = day.places.toMutableList()
         val temp = newPlaces[indexA]
         newPlaces[indexA] = newPlaces[indexB]
         newPlaces[indexB] = temp
-        
         currentItinerary[dayIndex] = day.copy(places = newPlaces)
         _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
     }
@@ -212,7 +246,6 @@ class TripViewModel : ViewModel() {
     fun movePlaceToDay(fromDayIndex: Int, placeIndex: Int, toDayIndex: Int) {
         val currentTrip = _tripResult.value ?: return
         val currentItinerary = currentTrip.itinerary.toMutableList()
-        
         val fromDay = currentItinerary[fromDayIndex]
         val placeToMove = fromDay.places[placeIndex]
         

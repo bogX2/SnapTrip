@@ -1,6 +1,9 @@
 package com.example.snaptrip.ui
 
 import android.graphics.BitmapFactory
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -8,7 +11,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -27,10 +33,14 @@ import com.example.snaptrip.viewmodel.TripViewModel
 fun TripListScreen(
     viewModel: TripViewModel,
     onBack: () -> Unit,
-    onTripSelected: () -> Unit
+    onTripSelected: () -> Unit,
+    onOpenJournal: (TripResponse) -> Unit // Parametro aggiunto
 ) {
     val trips by viewModel.userTrips.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+
+    // Stato per tenere traccia della card espansa
+    var selectedTripId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.loadUserTrips()
@@ -62,12 +72,20 @@ fun TripListScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.padding(padding)
             ) {
-                items(trips) { trip ->
+                items(trips, key = { it.firestoreId ?: it.hashCode() }) { trip ->
                     TripItem(
                         trip = trip,
+                        isSelected = selectedTripId == trip.firestoreId,
                         onClick = {
+                            // Se clicco su una già selezionata, la chiudo, altrimenti la apro
+                            selectedTripId = if (selectedTripId == trip.firestoreId) null else trip.firestoreId
+                        },
+                        onViewItinerary = {
                             viewModel.selectTrip(trip)
                             onTripSelected()
+                        },
+                        onOpenJournal = {
+                            onOpenJournal(trip)
                         },
                         onDelete = {
                             viewModel.deleteTrip(trip)
@@ -79,10 +97,14 @@ fun TripListScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TripItem(
     trip: TripResponse, 
+    isSelected: Boolean,
     onClick: () -> Unit,
+    onViewItinerary: () -> Unit,
+    onOpenJournal: () -> Unit, // Parametro aggiunto
     onDelete: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -114,74 +136,98 @@ fun TripItem(
     Card(
         onClick = onClick,
         elevation = CardDefaults.cardElevation(4.dp),
-        modifier = Modifier.fillMaxWidth().height(200.dp)
+        modifier = Modifier.fillMaxWidth().animateContentSize() // Anima il cambio di dimensione
     ) {
-        Box(Modifier.fillMaxSize()) {
-            // Immagine di copertina
-            if (trip.coverPhoto != null) {
-                val bitmap = remember(trip.coverPhoto) {
-                    try {
-                        val imageBytes = android.util.Base64.decode(trip.coverPhoto, android.util.Base64.DEFAULT)
-                        BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                    } catch (e: Exception) {
-                        null
+        Column {
+            Box(Modifier.height(200.dp)) {
+                // Immagine di copertina
+                if (trip.coverPhoto != null) {
+                    val bitmap = remember(trip.coverPhoto) {
+                        try {
+                            val imageBytes = android.util.Base64.decode(trip.coverPhoto, android.util.Base64.DEFAULT)
+                            BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                        } catch (e: Exception) {
+                            null
+                        }
                     }
-                }
 
-                if (bitmap != null) {
-                    AsyncImage(
-                        model = bitmap,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    if (bitmap != null) {
+                        AsyncImage(
+                            model = bitmap,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer))
+                    }
                 } else {
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer))
                 }
-            } else {
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer))
-            }
-            
-            // Overlay scuro per testo
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
-                    ))
-            )
+                
+                // Overlay scuro per testo
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
+                        ))
+                )
 
-            // Pulsante Cancella (in alto a destra)
-            IconButton(
-                onClick = { showDeleteDialog = true },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete Trip",
-                    tint = Color.White
-                )
+                // Pulsante Cancella
+                IconButton(
+                    onClick = { showDeleteDialog = true },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .background(Color.Black.copy(alpha = 0.3f), shape = MaterialTheme.shapes.small)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Trip",
+                        tint = Color.White
+                    )
+                }
+
+                // Info Viaggio
+                Column(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = trip.trip_name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${trip.itinerary.size} Days",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
             }
 
-            // Info Viaggio
-            Column(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = trip.trip_name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "${trip.itinerary.size} Days",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.8f)
-                )
+            // Sezione espandibile con i pulsanti
+            AnimatedVisibility(visible = isSelected) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    Button(onClick = onViewItinerary) {
+                        Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                        Text("View Itinerary")
+                    }
+                    Button(onClick = onOpenJournal) {
+                        Icon(Icons.Default.Book, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                        Text("Travel Journal")
+                    }
+                }
             }
         }
     }
