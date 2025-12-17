@@ -61,7 +61,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
         startStepCounter()
     }
 
-    // --- CONTAPASSI ---
+    // --- CONTAPASSI --- DA AGGIUSTARE
     private fun startStepCounter() {
         stepSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
@@ -70,8 +70,6 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
 
     override fun onSensorChanged(event: SensorEvent?) {
         event?.let {
-            // Il sensore step counter restituisce i passi totali dall'ultimo riavvio del dispositivo.
-            // Per un'app reale bisognerebbe salvare l'offset giornaliero. Qui mostriamo il raw value per demo.
             _steps.value = it.values[0].toInt()
         }
     }
@@ -84,6 +82,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     }
 
     // --- DIARIO ---
+    //funzione per prendere un viaggio specifico dell'utente
     fun loadJournal(tripId: String) {
         viewModelScope.launch {
             val result = repository.getJournalEntries(tripId)
@@ -93,31 +92,44 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
 
     fun addJournalEntry(tripId: String, text: String, photo: Bitmap?) {
         viewModelScope.launch {
-            var photoBase64: String? = null
-            if (photo != null) {
+            val photoBase64 = photo?.let { bitmap ->
                 val outputStream = ByteArrayOutputStream()
-                photo.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
-                photoBase64 = Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+                Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
             }
-
+            //ogni entry del diario ha foto e nome del viaggio
             val entry = JournalEntry(text = text, photoBase64 = photoBase64)
-            val result = repository.saveJournalEntry(tripId, entry)
+            repository.saveJournalEntry(tripId, entry)
+            loadJournal(tripId) // Ricarica
+        }
+    }
+    
+    fun updateJournalEntry(tripId: String, entry: JournalEntry, newText: String?, newPhoto: Bitmap?) {
+        viewModelScope.launch {
+            // Aggiorna testo se fornito
+            if (newText != null) entry.text = newText
             
-            if (result.isSuccess) {
-                loadJournal(tripId) // Ricarica la lista
+            // Aggiorna foto se fornita
+            if (newPhoto != null) {
+                val outputStream = ByteArrayOutputStream()
+                newPhoto.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+                entry.photoBase64 = Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
             }
+            
+            repository.saveJournalEntry(tripId, entry) // Salva l'oggetto aggiornato
+            loadJournal(tripId) // Ricarica
         }
     }
 
     // --- ALTRE FUNZIONI ESISTENTI (Invariate) ---
-    
+    //funzione per mettere una foto di copertina al viaggio
     fun setCoverPhoto(bitmap: Bitmap) {
         val outputStream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
         val byteArray = outputStream.toByteArray()
         _coverPhotoBase64.value = Base64.encodeToString(byteArray, Base64.DEFAULT)
     }
-
+    //funzione per caricare tutti i viaggi dell'utente
     fun loadUserTrips() {
         viewModelScope.launch {
             _isLoading.value = true
@@ -192,27 +204,42 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
             _isLoading.value = false
         }
     }
-
+    
+    // FUNZIONI DI MODIFICA ITINERARIO
+    //funzione per rimuovere un luogo dall'itinerario
     fun removePlace(dayIndex: Int, placeIndex: Int) {
         val currentTrip = _tripResult.value ?: return
         val currentItinerary = currentTrip.itinerary.toMutableList()
         val day = currentItinerary[dayIndex]
-        
-        val newPlaces = day.places.toMutableList().apply { removeAt(placeIndex) }
+        val newPlaces = day.places.toMutableList().apply {
+            removeAt(placeIndex)
+        }
         currentItinerary[dayIndex] = day.copy(places = newPlaces)
         _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
     }
-
+    //funzioni per spostare l'ordine dei posti da vedere nel singolo giorno
     fun movePlaceUp(dayIndex: Int, placeIndex: Int) {
-        if (placeIndex <= 0) return
-        swapPlaces(dayIndex, placeIndex, placeIndex - 1)
+        if (placeIndex > 0) {
+            val currentTrip = _tripResult.value ?: return
+            val currentItinerary = currentTrip.itinerary.toMutableList()
+            val day = currentItinerary[dayIndex]
+            val newPlaces = day.places.toMutableList()
+            Collections.swap(newPlaces, placeIndex, placeIndex - 1)
+            currentItinerary[dayIndex] = day.copy(places = newPlaces)
+            _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
+        }
     }
 
     fun movePlaceDown(dayIndex: Int, placeIndex: Int) {
         val currentTrip = _tripResult.value ?: return
-        val placesCount = currentTrip.itinerary[dayIndex].places.size
-        if (placeIndex >= placesCount - 1) return
-        swapPlaces(dayIndex, placeIndex, placeIndex + 1)
+        val day = currentTrip.itinerary[dayIndex]
+        if (placeIndex < day.places.size - 1) {
+            val currentItinerary = currentTrip.itinerary.toMutableList()
+            val newPlaces = day.places.toMutableList()
+            Collections.swap(newPlaces, placeIndex, placeIndex + 1)
+            currentItinerary[dayIndex] = day.copy(places = newPlaces)
+            _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
+        }
     }
 
     fun reorderPlaces(dayIndex: Int, fromIndex: Int, toIndex: Int) {
@@ -230,19 +257,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
         currentItinerary[dayIndex] = day.copy(places = newPlaces)
         _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
     }
-
-    private fun swapPlaces(dayIndex: Int, indexA: Int, indexB: Int) {
-        val currentTrip = _tripResult.value ?: return
-        val currentItinerary = currentTrip.itinerary.toMutableList()
-        val day = currentItinerary[dayIndex]
-        val newPlaces = day.places.toMutableList()
-        val temp = newPlaces[indexA]
-        newPlaces[indexA] = newPlaces[indexB]
-        newPlaces[indexB] = temp
-        currentItinerary[dayIndex] = day.copy(places = newPlaces)
-        _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
-    }
-
+    //funzione per spostare un luogo da un giorno all'altro
     fun movePlaceToDay(fromDayIndex: Int, placeIndex: Int, toDayIndex: Int) {
         val currentTrip = _tripResult.value ?: return
         val currentItinerary = currentTrip.itinerary.toMutableList()

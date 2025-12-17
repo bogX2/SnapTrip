@@ -10,20 +10,23 @@ import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.launch
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,13 +58,12 @@ fun TravelJournalScreen(
     tripName: String,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
     val journalEntries by viewModel.journalEntries.collectAsState()
     val steps by viewModel.steps.collectAsState()
     val weatherTemp by viewModel.weatherTemp.collectAsState()
 
-    // Stati per aggiunta nuova voce
     var showAddDialog by remember { mutableStateOf(false) }
+    var selectedEntry by remember { mutableStateOf<JournalEntry?>(null) }
 
     LaunchedEffect(tripId) {
         viewModel.loadJournal(tripId)
@@ -69,11 +71,13 @@ fun TravelJournalScreen(
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Entry")
+            if (selectedEntry == null) {
+                FloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Entry")
+                }
             }
         }
     ) { padding ->
@@ -97,10 +101,7 @@ fun TravelJournalScreen(
                 drawPath(
                     path = path,
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF4A90E2),
-                            Color(0xFF00BFA5)
-                        )
+                        colors = listOf(Color(0xFF4A90E2), Color(0xFF00BFA5))
                     )
                 )
             }
@@ -132,36 +133,45 @@ fun TravelJournalScreen(
                         .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Card Meteo
                     WeatherWidget(temp = weatherTemp)
-
-                    // Card Passi
                     StepsWidget(steps = steps)
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // LISTA DIARIO
-                LazyColumn(
+                // GRIGLIA DI IMMAGINI
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3), // 3 colonne
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    if (journalEntries.isEmpty()) {
-                        item {
-                            Text(
-                                "No memories yet. Add your first photo!",
-                                modifier = Modifier.fillMaxWidth().padding(32.dp),
-                                color = Color.Gray,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    } else {
-                        items(journalEntries) { entry ->
-                            JournalItem(entry)
+                    items(journalEntries, key = { it.firestoreId!! }) { entry ->
+                        JournalGridItem(entry) {
+                            selectedEntry = entry
                         }
                     }
                 }
+            }
+        }
+
+        // Immagine a schermo intero (se selezionata)
+        AnimatedVisibility(
+            visible = selectedEntry != null,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            if (selectedEntry != null) {
+                FullScreenImage(
+                    entry = selectedEntry!!,
+                    onDismiss = { selectedEntry = null },
+                    onEdit = { 
+                        // Qui potresti riaprire il dialog di aggiunta precompilato per la modifica
+                        // Per ora chiudiamo solo la visualizzazione full screen
+                        // (La modifica completa richiederebbe di passare l'entry al dialog)
+                    }
+                )
             }
         }
     }
@@ -232,14 +242,15 @@ fun StepsWidget(steps: Int) {
 }
 
 @Composable
-fun JournalItem(entry: JournalEntry) {
+fun JournalGridItem(entry: JournalEntry, onClick: () -> Unit) {
     Card(
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier.fillMaxWidth()
+        onClick = onClick,
+        modifier = Modifier
+            .aspectRatio(1f) // Immagini quadrate
+            .clip(RoundedCornerShape(12.dp)),
+        elevation = CardDefaults.cardElevation(4.dp)
     ) {
-        Column {
+        Box(Modifier.fillMaxSize()) {
             if (entry.photoBase64 != null) {
                 val bitmap = remember(entry.photoBase64) {
                     try {
@@ -248,20 +259,105 @@ fun JournalItem(entry: JournalEntry) {
                     } catch (e: Exception) { null }
                 }
                 if (bitmap != null) {
-                    AsyncImage(
-                        model = bitmap,
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
                         contentDescription = null,
-                        modifier = Modifier.fillMaxWidth().height(200.dp),
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            } else {
+                // Se non c'è foto, mostra la nota come testo
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
+                    Text(
+                        entry.text, 
+                        modifier = Modifier.padding(8.dp),
+                        maxLines = 3,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
             }
-            
-            Column(Modifier.padding(16.dp)) {
-                val dateStr = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()).format(Date(entry.date))
-                Text(dateStr, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                Spacer(Modifier.height(4.dp))
-                Text(entry.text, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+@Composable
+fun FullScreenImage(entry: JournalEntry, onDismiss: () -> Unit, onEdit: () -> Unit) {
+    // Box che copre tutto lo schermo
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.95f))
+            // Questo clickable intercetta i click sullo sfondo per chiudere
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null // Nessun effetto ripple sul click sfondo
+            ) { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                // Impediamo che i click sul contenuto chiudano la schermata
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { /* Do nothing */ },
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            val bitmap = remember(entry.photoBase64) {
+                try {
+                    val imageBytes = Base64.decode(entry.photoBase64, Base64.DEFAULT)
+                    BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                } catch (e: Exception) { null }
+            }
+
+            if (bitmap != null) {
+                // Immagine più grande possibile
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false) // Occupa spazio ma non forza se non serve
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Fit // Adatta mantenendo proporzioni
+                )
+            } else {
+                // Fallback icona grande se non c'è foto (solo testo)
+                Icon(
+                    Icons.Default.Image, 
+                    contentDescription = null, 
+                    tint = Color.Gray,
+                    modifier = Modifier.size(120.dp)
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // Testo scorrevole se lungo
+            Text(
+                entry.text, 
+                color = Color.White, 
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            val dateStr = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()).format(Date(entry.date))
+            Text(dateStr, color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+
+            Spacer(Modifier.height(32.dp))
+
+            Button(
+                onClick = onEdit,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Edit Note")
             }
         }
     }

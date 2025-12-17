@@ -31,7 +31,6 @@ class TripRepository {
                 // Altrimenti creiamo un nuovo documento
                 Log.d("TripRepository", "Creating new trip")
                 val docRef = tripsCollection.add(trip).await()
-                // Aggiorniamo l'oggetto locale con il nuovo ID
                 trip.firestoreId = docRef.id
                 Result.success(docRef.id)
             }
@@ -59,14 +58,11 @@ class TripRepository {
 
             Log.d("TripRepository", "Found ${snapshot.size()} documents")
             
-            // Convertiamo i documenti in oggetti e salviamo l'ID del documento
             val trips = snapshot.documents.mapNotNull { doc ->
                 val trip = doc.toObject(TripResponse::class.java)
-                trip?.firestoreId = doc.id // Salviamo l'ID per futuri update
+                trip?.firestoreId = doc.id 
                 trip
             }
-            
-            Log.d("TripRepository", "Parsed ${trips.size} TripResponse objects")
             
             Result.success(trips)
         } catch (e: Exception) {
@@ -96,8 +92,9 @@ class TripRepository {
     }
 
     // --- FUNZIONI DIARIO ---
-
+    //funzione per ottenere gli elementi del diario utente (che consistono nella lista dei trips)
     suspend fun getJournalEntries(tripId: String): Result<List<JournalEntry>> {
+        //vedo se utente è loggato
         val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
         return try {
             val snapshot = db.collection("users").document(userId)
@@ -115,13 +112,21 @@ class TripRepository {
         }
     }
 
+    //permette di aggiornare il diario dell'utente se fa aggiornamento (tipo dell'itinerario)
     suspend fun saveJournalEntry(tripId: String, entry: JournalEntry): Result<Unit> {
         val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
         return try {
-            db.collection("users").document(userId)
+            val collectionRef = db.collection("users").document(userId)
                 .collection("trips").document(tripId)
                 .collection("journal")
-                .add(entry).await()
+
+            if (entry.firestoreId != null) {
+                // UPDATE
+                collectionRef.document(entry.firestoreId!!).set(entry).await()
+            } else {
+                // CREATE
+                collectionRef.add(entry).await()
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

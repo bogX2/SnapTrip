@@ -1,7 +1,6 @@
 package com.example.snaptrip.ui
 
 import android.widget.Toast
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -15,7 +14,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,7 +41,6 @@ import com.example.snaptrip.data.model.PlaceDetail
 import com.example.snaptrip.viewmodel.TripViewModel
 import kotlinx.coroutines.launch
 
-// Caricato dal BuildConfig
 import com.example.snaptrip.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,10 +55,7 @@ fun ItineraryScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     
-    // Stato per la modalità Modifica
     var isEditing by remember { mutableStateOf(false) }
-
-    // Dialog per spostare il giorno
     var showMoveDialog by remember { mutableStateOf(false) }
     var moveSourceDayIndex by remember { mutableIntStateOf(-1) }
     var moveSourcePlaceIndex by remember { mutableIntStateOf(-1) }
@@ -64,11 +67,10 @@ fun ItineraryScreen(
         )
     )
 
-    // Gestione feedback salvataggio
     LaunchedEffect(saveSuccess) {
         if (saveSuccess) {
             Toast.makeText(context, "Trip saved successfully!", Toast.LENGTH_SHORT).show()
-            onBack() // Torniamo indietro dopo il salvataggio
+            onBack()
         }
     }
 
@@ -119,7 +121,6 @@ fun ItineraryScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        // Uso Icona default per evitare problemi di compatibilità
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -140,10 +141,7 @@ fun ItineraryScreen(
         floatingActionButton = {
             if (!isEditing) {
                 ExtendedFloatingActionButton(
-                    onClick = { 
-                        // SALVATAGGIO SU FIREBASE
-                        viewModel.saveCurrentTrip() 
-                    },
+                    onClick = { viewModel.saveCurrentTrip() },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = Color.White,
                     shape = RoundedCornerShape(20.dp)
@@ -168,7 +166,6 @@ fun ItineraryScreen(
                 val pagerState = rememberPagerState(pageCount = { trip.itinerary.size })
 
                 Column(Modifier.fillMaxSize()) {
-                    // TAB
                     ScrollableTabRow(
                         selectedTabIndex = pagerState.currentPage,
                         edgePadding = 16.dp,
@@ -199,7 +196,6 @@ fun ItineraryScreen(
                         }
                     }
 
-                    // PAGER
                     HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
                         val places = trip.itinerary[page].places
                         
@@ -209,7 +205,6 @@ fun ItineraryScreen(
                         ) {
                             itemsIndexed(places) { index, place ->
                                 if (isEditing) {
-                                    // ITEM IN EDIT MODE (Frecce)
                                     EditModeItem(
                                         place = place,
                                         onMoveUp = { viewModel.movePlaceUp(page, index) },
@@ -222,7 +217,6 @@ fun ItineraryScreen(
                                         }
                                     )
                                 } else {
-                                    // ITEM NORMALE
                                     EnhancedTimelineItem(
                                         place = place,
                                         index = index,
@@ -257,7 +251,6 @@ fun EditModeItem(
             modifier = Modifier.padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Frecce Su/Giu
             Column {
                 IconButton(onClick = onMoveUp, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Up")
@@ -286,7 +279,6 @@ fun EditModeItem(
 @Composable
 fun EnhancedTimelineItem(place: PlaceDetail, index: Int, isLast: Boolean) {
     Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-        // Colonna Timeline
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.width(32.dp)
@@ -320,7 +312,6 @@ fun EnhancedTimelineItem(place: PlaceDetail, index: Int, isLast: Boolean) {
 
         Spacer(Modifier.width(16.dp))
 
-        // Card con stile visuale
         Card(
             modifier = Modifier.padding(bottom = 24.dp).fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
