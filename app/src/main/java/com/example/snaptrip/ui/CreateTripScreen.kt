@@ -41,15 +41,17 @@ import com.example.snaptrip.viewmodel.TripViewModel
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.AutocompleteSessionToken
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
+import com.google.android.libraries.places.api.net.PlacesClient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateTripScreen(
     navController: NavController,
-    viewModel: TripViewModel = viewModel()
+    viewModel: TripViewModel = viewModel(),
+    placesClient: PlacesClient
 ) {
     val context = LocalContext.current
-    val placesClient = remember { Places.createClient(context) }
+   // val placesClient = remember { Places.createClient(context) }
 
     // Stati UI Input
     var tripName by remember { mutableStateOf("") }

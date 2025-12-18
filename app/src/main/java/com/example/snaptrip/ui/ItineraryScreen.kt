@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -14,19 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -37,11 +29,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.snaptrip.BuildConfig
 import com.example.snaptrip.data.model.PlaceDetail
+import com.example.snaptrip.ui.components.CompassDialog // Assicurati che questo import esista
 import com.example.snaptrip.viewmodel.TripViewModel
 import kotlinx.coroutines.launch
-
-import com.example.snaptrip.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,18 +46,33 @@ fun ItineraryScreen(
     val error by viewModel.error.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    
+
     var isEditing by remember { mutableStateOf(false) }
     var showMoveDialog by remember { mutableStateOf(false) }
     var moveSourceDayIndex by remember { mutableIntStateOf(-1) }
     var moveSourcePlaceIndex by remember { mutableIntStateOf(-1) }
-    
+
+    // MODIFICA 1: Usiamo PlaceDetail perché è quello che usa la tua lista
+    var selectedStopForCompass by remember { mutableStateOf<PlaceDetail?>(null) }
+
     val backgroundBrush = Brush.verticalGradient(
         colors = listOf(
             MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
             MaterialTheme.colorScheme.surface
         )
     )
+
+    // MODIFICA 2: Mostra il Dialog se una tappa è selezionata
+    if (selectedStopForCompass != null) {
+        // Assumo che PlaceDetail abbia latitude e longitude.
+        // Se si chiamano "lat" e "lng", correggi qui sotto.
+        CompassDialog(
+            targetLat = selectedStopForCompass!!.lat,
+            targetLon = selectedStopForCompass!!.lng,
+            targetName = selectedStopForCompass!!.name,
+            onDismiss = { selectedStopForCompass = null }
+        )
+    }
 
     LaunchedEffect(saveSuccess) {
         if (saveSuccess) {
@@ -127,8 +134,8 @@ fun ItineraryScreen(
                 actions = {
                     TextButton(onClick = { isEditing = !isEditing }) {
                         Icon(
-                            if (isEditing) Icons.Default.Check else Icons.Default.Edit, 
-                            contentDescription = null, 
+                            if (isEditing) Icons.Default.Check else Icons.Default.Edit,
+                            contentDescription = null,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(4.dp))
@@ -198,7 +205,7 @@ fun ItineraryScreen(
 
                     HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
                         val places = trip.itinerary[page].places
-                        
+
                         LazyColumn(
                             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 100.dp, top = 8.dp),
                             modifier = Modifier.fillMaxSize()
@@ -217,10 +224,12 @@ fun ItineraryScreen(
                                         }
                                     )
                                 } else {
+                                    // MODIFICA 3: Passiamo la callback per aprire la bussola
                                     EnhancedTimelineItem(
                                         place = place,
                                         index = index,
-                                        isLast = index == places.lastIndex
+                                        isLast = index == places.lastIndex,
+                                        onNavigateClick = { selectedStopForCompass = place }
                                     )
                                 }
                             }
@@ -276,8 +285,14 @@ fun EditModeItem(
     }
 }
 
+// MODIFICA 4: Aggiunto parametro onNavigateClick
 @Composable
-fun EnhancedTimelineItem(place: PlaceDetail, index: Int, isLast: Boolean) {
+fun EnhancedTimelineItem(
+    place: PlaceDetail,
+    index: Int,
+    isLast: Boolean,
+    onNavigateClick: () -> Unit
+) {
     Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -321,6 +336,7 @@ fun EnhancedTimelineItem(place: PlaceDetail, index: Int, isLast: Boolean) {
             Column {
                 if (place.photoReference != null) {
                     val photoUrl = "https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${place.photoReference}&key=${BuildConfig.MAPS_API_KEY}"
+
                     AsyncImage(
                         model = photoUrl,
                         contentDescription = null,
@@ -342,13 +358,27 @@ fun EnhancedTimelineItem(place: PlaceDetail, index: Int, isLast: Boolean) {
                         }
                     }
 
-                    Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.LocationOn, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                    // MODIFICA 5: Indirizzo Cliccabile che apre la Bussola
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .clickable { onNavigateClick() } // CLICCA QUI PER BUSSOLA
+                            .padding(4.dp), // Aumenta area cliccabile
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Cambiata icona in Explore per suggerire azione
+                        Icon(
+                            Icons.Default.Explore,
+                            contentDescription = "Navigate",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            place.address ?: "No address",
+                            place.address ?: "Navigate to location",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MaterialTheme.colorScheme.primary, // Colore Primary per indicare link
+                            fontWeight = FontWeight.Medium,
                             maxLines = 1
                         )
                     }

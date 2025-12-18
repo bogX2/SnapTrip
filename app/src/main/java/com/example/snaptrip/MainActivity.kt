@@ -24,36 +24,46 @@ import com.example.snaptrip.ui.theme.SnapTripTheme
 import com.example.snaptrip.viewmodel.AuthViewModel
 import com.example.snaptrip.ui.CreateTripScreen
 import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.net.PlacesClient // IMPORT IMPORTANTE
 import com.example.snaptrip.viewmodel.TripViewModel
 import com.example.snaptrip.ui.ItineraryScreen
 import com.example.snaptrip.ui.TripListScreen
-import com.example.snaptrip.ui.TravelJournalScreen // AGGIUNTO
+import com.example.snaptrip.ui.TravelJournalScreen
 import com.example.snaptrip.BuildConfig
+
+// Import per il test (opzionale se vuoi testare solo quella pagina)
+import com.example.snaptrip.ui.TestPlacesScreen
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 1. Inizializzazione Places SDK
         try {
-            // Inizializzazione sicura di Google Places
             if (!Places.isInitialized()) {
                 val apiKey = BuildConfig.MAPS_API_KEY
-                if (apiKey.isNullOrBlank() || apiKey == "null") {
-                    // Evita il crash se la chiave manca
-                    Toast.makeText(this, "Maps API Key mancante! Configura local.properties", Toast.LENGTH_LONG).show()
-                } else {
+                if (!apiKey.isNullOrBlank() && apiKey != "null") {
                     Places.initialize(applicationContext, apiKey)
                 }
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(this, "Errore init Places: ${e.message}", Toast.LENGTH_LONG).show()
         }
+
+        // 2. Creazione del Client UNA VOLTA SOLA
+        val placesClient = Places.createClient(applicationContext)
 
         setContent {
             SnapTripTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    SnapTripApp()
+
+                    // PER IL TEST VELOCE DELLA PAGINA FOTO:
+                    // Decommenta la riga sotto e commenta SnapTripApp
+                     //TestPlacesScreen()
+
+                    // PER L'APP NORMALE (con fix del crash):
+                   SnapTripApp(placesClient)
                 }
             }
         }
@@ -61,11 +71,9 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun SnapTripApp() {
+fun SnapTripApp(placesClient: PlacesClient) { // AGGIUNTO PARAMETRO
     val navController = rememberNavController()
     val authViewModel: AuthViewModel = viewModel()
-
-    // ViewModel CONDIVISO per il viaggio
     val tripViewModel: TripViewModel = viewModel()
 
     val user by authViewModel.user.collectAsState()
@@ -94,12 +102,11 @@ fun SnapTripApp() {
                 MainPage(
                     userName = userName,
                     onCreateTrip = {
-                        // Reset del risultato precedente prima di crearne uno nuovo
                         tripViewModel.clearResult()
                         navController.navigate("create_trip")
                     },
-                    onViewHistory = { 
-                        navController.navigate("trip_list") 
+                    onViewHistory = {
+                        navController.navigate("trip_list")
                     },
                     onLogout = {
                         authViewModel.logout()
@@ -111,22 +118,17 @@ fun SnapTripApp() {
             composable("create_trip") {
                 CreateTripScreen(
                     navController = navController,
-                    viewModel = tripViewModel
+                    viewModel = tripViewModel,
+                    placesClient = placesClient // PASSAGGIO DEL CLIENT
                 )
             }
 
-            // LISTA VIAGGI
             composable("trip_list") {
                 TripListScreen(
                     viewModel = tripViewModel,
                     onBack = { navController.popBackStack() },
-                    onTripSelected = {
-                        navController.navigate("itinerary")
-                    },
+                    onTripSelected = { navController.navigate("itinerary") },
                     onOpenJournal = { trip ->
-                        // Passiamo l'ID e il nome del viaggio come argomenti o tramite VM se preferisci
-                        // Per semplicità qui navighiamo e il VM ha già il viaggio selezionato? 
-                        // No, TripListScreen non seleziona il viaggio quando clicchi "Journal", quindi lo passiamo qui
                         tripViewModel.selectTrip(trip)
                         navController.navigate("journal")
                     }
@@ -142,12 +144,9 @@ fun SnapTripApp() {
                     }
                 )
             }
-            
-            // NUOVO: TRAVEL JOURNAL
+
             composable("journal") {
-                // Recuperiamo il viaggio selezionato dal ViewModel
                 val selectedTrip = tripViewModel.tripResult.collectAsState().value
-                
                 if (selectedTrip != null && selectedTrip.firestoreId != null) {
                     TravelJournalScreen(
                         viewModel = tripViewModel,
@@ -156,9 +155,8 @@ fun SnapTripApp() {
                         onBack = { navController.popBackStack() }
                     )
                 } else {
-                    // Fallback se qualcosa va storto
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        androidx.compose.material3.Text("No trip selected")
+                        ("No trip selected")
                     }
                 }
             }
