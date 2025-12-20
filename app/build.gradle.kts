@@ -34,6 +34,8 @@ android {
         // 2. Per il Codice Kotlin (Places SDK) - AGGIUNGI QUESTO:
         buildConfigField("String", "MAPS_API_KEY", "\"${localProperties.getProperty("MAPS_API_KEY")}\"")
 
+        buildConfigField("String", "OPENWEATHER_KEY", "\"${localProperties.getProperty("OPENWEATHER_API_KEY")}\"")
+
     }
 
     buildTypes {

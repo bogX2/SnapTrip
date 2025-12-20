@@ -49,6 +49,12 @@ import com.example.snaptrip.viewmodel.TripViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import androidx.activity.compose.rememberLauncherForActivityResult
+//import androidx.activity.result.contract.ActivityResultContracts
+//import android.os.Build
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,12 +64,69 @@ fun TravelJournalScreen(
     tripName: String,
     onBack: () -> Unit
 ) {
+
+    // 1. Observe the selected trip to get access to its itinerary/coordinates
+    val selectedTrip by viewModel.tripResult.collectAsState()
+
     val journalEntries by viewModel.journalEntries.collectAsState()
     val steps by viewModel.steps.collectAsState()
     val weatherTemp by viewModel.weatherTemp.collectAsState()
 
+    val weatherInfo by viewModel.weatherInfo.collectAsState()
+
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedEntry by remember { mutableStateOf<JournalEntry?>(null) }
+
+    val context = LocalContext.current
+
+    // 1. Setup Permission Launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // If granted, ensure counter is reset and ready
+            viewModel.resetStepCounter()
+        }
+    }
+
+    // Trigger Weather Fetch
+    LaunchedEffect(tripId) {
+        viewModel.loadJournal(tripId)
+        //viewModel.resetStepCounter()
+
+        // LOGIC: Find the first valid coordinate from the itinerary
+        val targetPlace = selectedTrip?.itinerary
+            ?.firstOrNull() // Get first day
+            ?.places
+            ?.firstOrNull() // Get first place of that day
+
+        if (targetPlace != null) {
+            // Fetch weather for the specific trip location
+            viewModel.fetchRealTimeWeather(targetPlace.lat, targetPlace.lng)
+        } else {
+            // Fallback (Optional): If trip has no places, you could default to a known city
+            // or try to use the device GPS if you implemented the location permission check here.
+        }
+
+        // STEP COUNTER PERMISSION LOGIC
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // On Android 10+, check for ACTIVITY_RECOGNITION
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.ACTIVITY_RECOGNITION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                // Request permission
+                permissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+            } else {
+                // Permission already granted
+                viewModel.resetStepCounter()
+            }
+        } else {
+            // Older Android versions don't need runtime permission
+            viewModel.resetStepCounter()
+        }
+    }
 
     LaunchedEffect(tripId) {
         viewModel.loadJournal(tripId)

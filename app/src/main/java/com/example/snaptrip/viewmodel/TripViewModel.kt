@@ -10,6 +10,7 @@ import android.hardware.SensorManager
 import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.snaptrip.BuildConfig
 import com.example.snaptrip.data.model.JournalEntry
 import com.example.snaptrip.data.model.TripRequest
 import com.example.snaptrip.data.model.TripResponse
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.util.Collections
+import com.example.snaptrip.data.remote.WeatherClient
 
 class TripViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
@@ -50,11 +52,17 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     private val _journalEntries = MutableStateFlow<List<JournalEntry>>(emptyList())
     val journalEntries = _journalEntries.asStateFlow()
 
+
     // Stati per Contapassi e Meteo
+    private var initialStepCount: Int = -1 // To store the offset
     private val _steps = MutableStateFlow(0)
     val steps = _steps.asStateFlow()
+
+    // We update the existing weatherTemp to be more robust or map it to WeatherInfo
+    private val _weatherInfo = MutableStateFlow<com.example.snaptrip.data.model.WeatherInfo?>(null)
+    val weatherInfo = _weatherInfo.asStateFlow()
     
-    private val _weatherTemp = MutableStateFlow(25) // Temp fittizia
+    private val _weatherTemp = MutableStateFlow(0)
     val weatherTemp = _weatherTemp.asStateFlow()
 
     init {
@@ -68,9 +76,56 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
         }
     }
 
+    // Reset steps (e.g., when starting a new "Trip Day")
+    fun resetStepCounter() {
+        initialStepCount = -1
+        _steps.value = 0
+    }
+
     override fun onSensorChanged(event: SensorEvent?) {
         event?.let {
-            _steps.value = it.values[0].toInt()
+            if (it.sensor.type == Sensor.TYPE_STEP_COUNTER) {
+                val currentTotalSteps = it.values[0].toInt()
+
+                // If this is the first reading of the session, set it as the offset
+                if (initialStepCount == -1) {
+                    initialStepCount = currentTotalSteps
+                }
+
+                // Calculate steps taken since the session started
+                val sessionSteps = currentTotalSteps - initialStepCount
+                _steps.value = if (sessionSteps >= 0) sessionSteps else 0
+            }
+        }
+    }
+
+    // --- WEATHER LOGIC ---
+    fun fetchRealTimeWeather(lat: Double, lon: Double) {
+        viewModelScope.launch {
+            try {
+
+                val apiKey = BuildConfig.OPENWEATHER_KEY
+
+                val response = WeatherClient.instance.getCurrentWeather(lat, lon, apiKey)
+
+                if (response.isSuccessful && response.body() != null) {
+                    val apiData = response.body()!!
+
+                    // Update the simple Temp flow (for existing UI)
+                    _weatherTemp.value = apiData.main.temp.toInt()
+
+                    // Update the detailed WeatherInfo object (for future UI)
+                    val info = com.example.snaptrip.data.model.WeatherInfo(
+                        temp = apiData.main.temp.toInt(),
+                        description = apiData.weather.firstOrNull()?.main ?: "",
+                        iconCode = apiData.weather.firstOrNull()?.icon ?: ""
+                    )
+                    _weatherInfo.value = info
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Handle error (optional: set _weatherTemp to 0 or null)
+            }
         }
     }
 
