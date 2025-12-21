@@ -85,8 +85,8 @@ fun TravelJournalScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            // If granted, ensure counter is reset and ready
-            viewModel.resetStepCounter()
+            //viewModel.resetStepCounter()
+            // Now We do NOT reset steps. The sensor will simply pick up where it left off.
         }
     }
 
@@ -121,16 +121,12 @@ fun TravelJournalScreen(
                 permissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
             } else {
                 // Permission already granted
-                viewModel.resetStepCounter()
+                //viewModel.resetStepCounter()
             }
         } else {
             // Older Android versions don't need runtime permission
-            viewModel.resetStepCounter()
+            //viewModel.resetStepCounter()
         }
-    }
-
-    LaunchedEffect(tripId) {
-        viewModel.loadJournal(tripId)
     }
 
     Scaffold(

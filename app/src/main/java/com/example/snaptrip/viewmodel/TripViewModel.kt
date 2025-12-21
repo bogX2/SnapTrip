@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.util.Collections
 import com.example.snaptrip.data.remote.WeatherClient
+import android.content.SharedPreferences
 
 class TripViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
@@ -52,9 +53,11 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     private val _journalEntries = MutableStateFlow<List<JournalEntry>>(emptyList())
     val journalEntries = _journalEntries.asStateFlow()
 
+    // Get SharedPreferences
+    private val prefs: SharedPreferences = application.getSharedPreferences("snap_trip_prefs", Context.MODE_PRIVATE)
 
     // Stati per Contapassi e Meteo
-    private var initialStepCount: Int = -1 // To store the offset
+    //private var initialStepCount: Int = -1 // To store the offset
     private val _steps = MutableStateFlow(0)
     val steps = _steps.asStateFlow()
 
@@ -77,24 +80,51 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     }
 
     // Reset steps (e.g., when starting a new "Trip Day")
-    fun resetStepCounter() {
-        initialStepCount = -1
-        _steps.value = 0
-    }
+    //fun resetStepCounter() {
+    //    initialStepCount = -1
+    //    _steps.value = 0
+    //}
 
     override fun onSensorChanged(event: SensorEvent?) {
         event?.let {
             if (it.sensor.type == Sensor.TYPE_STEP_COUNTER) {
                 val currentTotalSteps = it.values[0].toInt()
 
+                // We need the ID of the currently active trip to know which counter to update
+                val currentTripId = _tripResult.value?.firestoreId ?: return
+
+                // Check if we already have a saved starting point for this trip
+                val savedOffset = prefs.getInt("steps_offset_$currentTripId", -1)
+
+                var calculatedSteps = 0
+
                 // If this is the first reading of the session, set it as the offset
-                if (initialStepCount == -1) {
-                    initialStepCount = currentTotalSteps
+                //if (initialStepCount == -1) {
+                //    initialStepCount = currentTotalSteps
+                //}
+
+                if (savedOffset == -1) {
+                    // FIRST TIME EVER for this trip: Save the current sensor value as the "Zero" point
+                    prefs.edit().putInt("steps_offset_$currentTripId", currentTotalSteps).apply()
+                    calculatedSteps = 0
+                } else if (currentTotalSteps < savedOffset) {
+                    // EDGE CASE: Device rebooted (sensor reset to 0).
+                    // Reset our offset to current so we don't show negative numbers.
+                    // (Note: This means steps before reboot are lost, which is standard Android limitation without a database)
+                    prefs.edit().putInt("steps_offset_$currentTripId", currentTotalSteps).apply()
+                    calculatedSteps = 0
+                } else {
+                    // NORMAL CASE: Calculate diff
+                    calculatedSteps = currentTotalSteps - savedOffset
                 }
 
+                _steps.value = calculatedSteps
+                // This ensures that next time we open the app, we remember we had "calculatedSteps"
+                prefs.edit().putInt("steps_saved_value_$currentTripId", calculatedSteps).apply()
+
                 // Calculate steps taken since the session started
-                val sessionSteps = currentTotalSteps - initialStepCount
-                _steps.value = if (sessionSteps >= 0) sessionSteps else 0
+                //val sessionSteps = currentTotalSteps - initialStepCount
+                //_steps.value = if (sessionSteps >= 0) sessionSteps else 0
             }
         }
     }
@@ -139,6 +169,10 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     // --- DIARIO ---
     //funzione per prendere un viaggio specifico dell'utente
     fun loadJournal(tripId: String) {
+        // Restore the last known step count immediately
+        val lastKnownSteps = prefs.getInt("steps_saved_value_$tripId", 0)
+        _steps.value = lastKnownSteps
+
         viewModelScope.launch {
             val result = repository.getJournalEntries(tripId)
             result.onSuccess { _journalEntries.value = it }
