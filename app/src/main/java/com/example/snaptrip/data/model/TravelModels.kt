@@ -20,12 +20,13 @@ data class TripResponse(
     var itinerary: List<DayItinerary> = ArrayList(),
     var error: String? = null,
     var coverPhoto: String? = null,
+    var lifecycleStatus: String = "DRAFT", // Trip Lifecycle Status (Default is DRAFT)
 
 
     //campo che contiene l'id del documento su Firestore che indica il viaggio
     @get:Exclude var firestoreId: String? = null
 ) {
-    constructor() : this("", "", null, ArrayList(), null, null, null)
+    constructor() : this("", "", null, ArrayList(), null, null, "DRAFT")
 }
 
 data class WeatherInfo(

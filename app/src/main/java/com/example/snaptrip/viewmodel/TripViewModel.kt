@@ -220,6 +220,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
                     val body = response.body()!!
                     if (body.status == "success") {
                         body.coverPhoto = _coverPhotoBase64.value
+                        body.lifecycleStatus = "DRAFT"
                         _tripResult.value = body 
                     } else {
                         _error.value = body.error ?: "Server Error"
@@ -238,6 +239,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
 
     fun saveCurrentTrip() {
         val currentTrip = _tripResult.value ?: return
+        currentTrip.lifecycleStatus = "SAVED"
         viewModelScope.launch {
             _isLoading.value = true
             val result = repository.saveTripToFirestore(currentTrip)
@@ -256,6 +258,29 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
                 _userTrips.value = _userTrips.value.filter { it.firestoreId != tripId }
             }
             result.onFailure { _error.value = "Failed to delete: ${it.message}" }
+            _isLoading.value = false
+        }
+    }
+
+    // Activates a trip (Unlocks sensors)
+    fun activateTrip(trip: TripResponse) {
+        viewModelScope.launch {
+            _isLoading.value = true
+
+            // 1. Update local object
+            trip.lifecycleStatus = "ACTIVE"
+
+            // 2. Update Firestore
+            // We reuse saveTripToFirestore because it handles updates if ID exists
+            val result = repository.saveTripToFirestore(trip)
+
+            result.onSuccess {
+                // Refresh list to show new status
+                loadUserTrips()
+            }
+            result.onFailure {
+                _error.value = "Failed to activate trip: ${it.message}"
+            }
             _isLoading.value = false
         }
     }

@@ -47,6 +47,8 @@ fun ItineraryScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    val isTripActive = tripResult?.lifecycleStatus == "ACTIVE"
+
     var isEditing by remember { mutableStateOf(false) }
     var showMoveDialog by remember { mutableStateOf(false) }
     var moveSourceDayIndex by remember { mutableIntStateOf(-1) }
@@ -229,7 +231,13 @@ fun ItineraryScreen(
                                         place = place,
                                         index = index,
                                         isLast = index == places.lastIndex,
-                                        onNavigateClick = { selectedStopForCompass = place }
+                                        onNavigateClick = {
+                                            if (isTripActive) {
+                                                selectedStopForCompass = place
+                                            } else {
+                                                Toast.makeText(context, "Start the trip to use Navigation", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
                                     )
                                 }
                             }

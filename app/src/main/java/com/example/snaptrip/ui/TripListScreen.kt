@@ -89,6 +89,9 @@ fun TripListScreen(
                         },
                         onDelete = {
                             viewModel.deleteTrip(trip)
+                        },
+                        onActivate = {
+                            viewModel.activateTrip(trip)
                         }
                     )
                 }
@@ -105,7 +108,8 @@ fun TripItem(
     onClick: () -> Unit,
     onViewItinerary: () -> Unit,
     onOpenJournal: () -> Unit, // Parametro aggiunto
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onActivate: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -174,6 +178,21 @@ fun TripItem(
                         ))
                 )
 
+                // NEW: Status Badge (Top Left)
+                Surface(
+                    modifier = Modifier.padding(8.dp).align(Alignment.TopStart),
+                    shape = MaterialTheme.shapes.small,
+                    color = if (trip.lifecycleStatus == "ACTIVE") MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.6f)
+                ) {
+                    Text(
+                        text = if (trip.lifecycleStatus == "ACTIVE") "LIVE TRIP" else "PLANNED",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
                 // Pulsante Cancella
                 IconButton(
                     onClick = { showDeleteDialog = true },
@@ -211,21 +230,43 @@ fun TripItem(
 
             // Sezione espandibile con i pulsanti
             AnimatedVisibility(visible = isSelected) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceAround
-                ) {
-                    Button(onClick = onViewItinerary) {
-                        Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                        Text("View Itinerary")
+                Column { // Changed Row to Column to stack the Start button
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        Button(onClick = onViewItinerary) {
+                            Icon(
+                                Icons.Default.Map,
+                                contentDescription = null,
+                                modifier = Modifier.size(ButtonDefaults.IconSize)
+                            )
+                            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                            Text("View Itinerary")
+                        }
+                        Button(onClick = onOpenJournal) {
+                            Icon(
+                                Icons.Default.Book,
+                                contentDescription = null,
+                                modifier = Modifier.size(ButtonDefaults.IconSize)
+                            )
+                            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                            Text("Travel Journal")
+                        }
                     }
-                    Button(onClick = onOpenJournal) {
-                        Icon(Icons.Default.Book, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                        Text("Travel Journal")
+                    // NEW: Start Trip Button (Only if not active)
+                    if (trip.lifecycleStatus != "ACTIVE") {
+                        Button(
+                            onClick = onActivate,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                        ) {
+                            Text("START TRIP NOW")
+                        }
                     }
                 }
             }

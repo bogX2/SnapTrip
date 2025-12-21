@@ -67,6 +67,7 @@ fun TravelJournalScreen(
 
     // 1. Observe the selected trip to get access to its itinerary/coordinates
     val selectedTrip by viewModel.tripResult.collectAsState()
+    val isTripActive = selectedTrip?.lifecycleStatus == "ACTIVE"
 
     val journalEntries by viewModel.journalEntries.collectAsState()
     val steps by viewModel.steps.collectAsState()
@@ -190,14 +191,37 @@ fun TravelJournalScreen(
                 }
 
                 // WIDGETS: Meteo e Passi
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    WeatherWidget(temp = weatherTemp)
-                    StepsWidget(steps = steps)
+                if(isTripActive) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        WeatherWidget(temp = weatherTemp)
+                        StepsWidget(steps = steps)
+                    }
+                } else {
+                    // Placeholder for Inactive Trips
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color.Gray)
+                            Spacer(Modifier.width(16.dp))
+                            Text(
+                                "Start this trip from the list to unlock Weather and Step Counter.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
