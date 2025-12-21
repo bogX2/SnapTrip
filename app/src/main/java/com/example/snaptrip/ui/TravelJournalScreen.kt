@@ -62,7 +62,8 @@ fun TravelJournalScreen(
     viewModel: TripViewModel,
     tripId: String,
     tripName: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onViewItinerary: () -> Unit
 ) {
 
     // 1. Observe the selected trip to get access to its itinerary/coordinates
@@ -172,18 +173,42 @@ fun TravelJournalScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                    // Left Side: Back Arrow and Title
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        }
+                        Text(
+                            text = tripName,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
                     }
-                    Text(
-                        text = tripName,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+
+                    // Right Side: END TRIP BUTTON
+                    // Only visible if the trip is currently ACTIVE
+                    if (isTripActive) {
+                        Button(
+                            onClick = {
+                                viewModel.endTrip(tripId)
+                                onBack() // Return to home after ending
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.8f)),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Text("End Trip", fontSize = 12.sp)
+                        }
+                    }
                 }
 
                 // WIDGETS: Meteo e Passi
@@ -220,7 +245,31 @@ fun TravelJournalScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Itinerary button
+                Button(
+                    onClick = onViewItinerary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .height(54.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(16.dp), // Softer corners
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 8.dp, // Higher shadow
+                        pressedElevation = 2.dp
+                    )
+                ) {
+                    Icon(Icons.Default.Map, contentDescription = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text("View Trip Itinerary", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // GRIGLIA DI IMMAGINI
                 LazyVerticalGrid(

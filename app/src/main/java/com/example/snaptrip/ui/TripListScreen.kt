@@ -34,9 +34,24 @@ fun TripListScreen(
     viewModel: TripViewModel,
     onBack: () -> Unit,
     onTripSelected: () -> Unit,
-    onOpenJournal: (TripResponse) -> Unit // Parametro aggiunto
+    onOpenJournal: (TripResponse) -> Unit,
+    filterStatus: String // "SAVED" or "COMPLETED"
 ) {
-    val trips by viewModel.userTrips.collectAsState()
+    // Observe all trips
+    val allTrips by viewModel.userTrips.collectAsState()
+
+    // Show only trips matching the requested status
+    val trips = remember(allTrips, filterStatus) {
+        if (filterStatus == "SAVED") {
+            allTrips.filter {  // In this way we show also the old trips
+                it.lifecycleStatus != "ACTIVE" && it.lifecycleStatus != "COMPLETED"
+            }
+        } else {
+            // For "Past Memories", we stay strict
+            allTrips.filter { it.lifecycleStatus == filterStatus }
+        }
+    }
+
     val isLoading by viewModel.isLoading.collectAsState()
 
     // Stato per tenere traccia della card espansa
@@ -49,7 +64,7 @@ fun TripListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Your Trips") },
+                title = { Text(if (filterStatus == "SAVED") "Planned Trips" else "Past Memories") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

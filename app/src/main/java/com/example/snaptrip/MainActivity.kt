@@ -29,6 +29,7 @@ import com.example.snaptrip.viewmodel.TripViewModel
 import com.example.snaptrip.ui.ItineraryScreen
 import com.example.snaptrip.ui.TripListScreen
 import com.example.snaptrip.ui.TravelJournalScreen
+import com.example.snaptrip.data.model.TripResponse
 import com.example.snaptrip.BuildConfig
 
 // Import per il test (opzionale se vuoi testare solo quella pagina)
@@ -100,13 +101,20 @@ fun SnapTripApp(placesClient: PlacesClient) { // AGGIUNTO PARAMETRO
             composable("main") {
                 val userName = user?.name ?: "Traveler"
                 MainPage(
+                    viewModel = tripViewModel, // Pass ViewModel to find active trip
                     userName = userName,
                     onCreateTrip = {
                         tripViewModel.clearResult()
                         navController.navigate("create_trip")
                     },
-                    onViewHistory = {
-                        navController.navigate("trip_list")
+
+                    onViewPlanned = { navController.navigate("planned_trips") }, // New Route
+
+                    onViewPast = { navController.navigate("past_trips") },       // New Route
+
+                    onResumeActive = { activeTrip ->
+                        tripViewModel.selectTrip(activeTrip)
+                        navController.navigate("journal")
                     },
                     onLogout = {
                         authViewModel.logout()
@@ -123,7 +131,8 @@ fun SnapTripApp(placesClient: PlacesClient) { // AGGIUNTO PARAMETRO
                 )
             }
 
-            composable("trip_list") {
+            // PLANNED TRIPS
+            composable("planned_trips") {
                 TripListScreen(
                     viewModel = tripViewModel,
                     onBack = { navController.popBackStack() },
@@ -131,7 +140,22 @@ fun SnapTripApp(placesClient: PlacesClient) { // AGGIUNTO PARAMETRO
                     onOpenJournal = { trip ->
                         tripViewModel.selectTrip(trip)
                         navController.navigate("journal")
-                    }
+                    },
+                    filterStatus = "SAVED" // Show only future trips
+                )
+            }
+
+            // PAST TRIPS
+            composable("past_trips") {
+                TripListScreen(
+                    viewModel = tripViewModel,
+                    onBack = { navController.popBackStack() },
+                    onTripSelected = { navController.navigate("itinerary") },
+                    onOpenJournal = { trip ->
+                        tripViewModel.selectTrip(trip)
+                        navController.navigate("journal")
+                    },
+                    filterStatus = "COMPLETED" // Show only finished trips
                 )
             }
 
@@ -139,7 +163,7 @@ fun SnapTripApp(placesClient: PlacesClient) { // AGGIUNTO PARAMETRO
                 ItineraryScreen(
                     viewModel = tripViewModel,
                     onBack = {
-                        tripViewModel.clearResult()
+                        //tripViewModel.clearResult()
                         navController.popBackStack()
                     }
                 )
@@ -152,7 +176,11 @@ fun SnapTripApp(placesClient: PlacesClient) { // AGGIUNTO PARAMETRO
                         viewModel = tripViewModel,
                         tripId = selectedTrip.firestoreId!!,
                         tripName = selectedTrip.trip_name,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onViewItinerary = {
+                            // Since tripViewModel already has this trip selected, we just navigate to the itinerary screen
+                            navController.navigate("itinerary")
+                        }
                     )
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

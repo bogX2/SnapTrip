@@ -68,6 +68,10 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     private val _weatherTemp = MutableStateFlow(0)
     val weatherTemp = _weatherTemp.asStateFlow()
 
+    // HELPER: Get the currently active trip (if any) -- We derive this from the userTrips list
+    val currentActiveTrip: TripResponse?
+        get() = _userTrips.value.find { it.lifecycleStatus == "ACTIVE" }
+
     init {
         startStepCounter()
     }
@@ -218,6 +222,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
         val byteArray = outputStream.toByteArray()
         _coverPhotoBase64.value = Base64.encodeToString(byteArray, Base64.DEFAULT)
     }
+
     //funzione per caricare tutti i viaggi dell'utente
     fun loadUserTrips() {
         viewModelScope.launch {
@@ -298,23 +303,47 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
 
     // Activates a trip (Unlocks sensors)
     fun activateTrip(trip: TripResponse) {
+        // 1. Check if there is already an active trip
+        if (currentActiveTrip != null) {
+            _error.value = "You already have an active trip! End it before starting a new one."
+            return
+        }
+
         viewModelScope.launch {
             _isLoading.value = true
 
-            // 1. Update local object
+            // Update local object
             trip.lifecycleStatus = "ACTIVE"
 
-            // 2. Update Firestore
-            // We reuse saveTripToFirestore because it handles updates if ID exists
+            // Update Firestore -- We reuse saveTripToFirestore because it handles updates if ID exists
             val result = repository.saveTripToFirestore(trip)
 
             result.onSuccess {
-                // Refresh list to show new status
-                loadUserTrips()
+                loadUserTrips()  // Refresh list to show new status
             }
             result.onFailure {
                 _error.value = "Failed to activate trip: ${it.message}"
             }
+            _isLoading.value = false
+        }
+    }
+
+    // End a trip (Move to Past)
+    fun endTrip(tripId: String) {
+        val trip = _userTrips.value.find { it.firestoreId == tripId } ?: return
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            trip.lifecycleStatus = "COMPLETED" // New Status
+
+            val result = repository.saveTripToFirestore(trip)
+            result.onSuccess {
+                loadUserTrips() // Refresh list
+                // Optional: Stop sensors if we were tracking this trip
+                //hardResetStepCounterForTrip(tripId)
+            }
+            result.onFailure { _error.value = "Failed to end trip: ${it.message}" }
+
             _isLoading.value = false
         }
     }

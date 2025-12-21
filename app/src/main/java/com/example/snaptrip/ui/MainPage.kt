@@ -16,15 +16,36 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.snaptrip.R
+import com.example.snaptrip.data.model.TripResponse
+import androidx.compose.material.icons.filled.DirectionsWalk // For the "Resume" icon
+import androidx.compose.material.icons.filled.History       // For "Past Trips"
+import androidx.compose.material.icons.filled.Map           // For "Planned"
+import androidx.compose.runtime.LaunchedEffect
+import com.example.snaptrip.viewmodel.TripViewModel
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 
 @Composable
 fun MainPage(
+    viewModel: TripViewModel,
     userName: String,
     onCreateTrip: () -> Unit,
-    onViewHistory: () -> Unit,
+    onViewPlanned: () -> Unit,
+    onViewPast: () -> Unit,
+    onResumeActive: (TripResponse) -> Unit,
     onLogout: () -> Unit
 ) {
+    // Observe trips to check if one is active
+    val userTrips by viewModel.userTrips.collectAsState()
+    val activeTrip = userTrips.find { it.lifecycleStatus == "ACTIVE" }
+
+    // Load trips when entering the screen to ensure we have fresh data
+    LaunchedEffect(Unit) {
+        viewModel.loadUserTrips()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -66,7 +87,7 @@ fun MainPage(
                 color = MaterialTheme.colorScheme.primary
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Pulsanti
             MenuButton(
@@ -75,13 +96,71 @@ fun MainPage(
                 onClick = onCreateTrip
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            MenuButton(
-                text = "View Past Trips",
-                icon = Icons.Default.List,
-                onClick = onViewHistory
-            )
+            // 2. RESUME ACTIVE TRIP (Visible only if there is an active trip)
+            if (activeTrip != null) {
+                Button(
+                    onClick = { onResumeActive(activeTrip) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = ButtonDefaults.buttonElevation(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.DirectionsWalk, null, modifier = Modifier.size(32.dp))
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text("Resume Trip", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text(activeTrip.trip_name, fontSize = 14.sp)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // 3. SPLIT BUTTONS: PLANNED & PAST
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Planned Button
+                Button(
+                    onClick = onViewPlanned,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(80.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = ButtonDefaults.buttonElevation(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Map, null)
+                        Text("Planned", fontSize = 14.sp)
+                    }
+                }
+
+                // Past Button
+                Button(
+                    onClick = onViewPast,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(80.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = ButtonDefaults.buttonElevation(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.History, null)
+                        Text("Past", fontSize = 14.sp)
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(48.dp))
 
