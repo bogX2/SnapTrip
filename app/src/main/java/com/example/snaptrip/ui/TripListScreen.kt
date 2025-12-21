@@ -61,6 +61,23 @@ fun TripListScreen(
         viewModel.loadUserTrips()
     }
 
+
+    // OBSERVE THE ERROR STATE
+    val errorMessage by viewModel.error.collectAsState()
+
+    // CREATE SNACKBAR HOST STATE
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // TRIGGER SNACKBAR WHEN ERROR OCCURS
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -71,7 +88,9 @@ fun TripListScreen(
                     }
                 }
             )
-        }
+        },
+        // ADD SNACKBAR HOST TO SCAFFOLD
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { padding ->
         if (isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

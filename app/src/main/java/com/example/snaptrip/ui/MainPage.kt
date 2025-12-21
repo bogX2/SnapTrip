@@ -49,17 +49,22 @@ fun MainPage(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Header: Logo e nome app in alto a sinistra
+
+        Spacer(modifier = Modifier.height(40.dp)) // Push the logo down by 40dp (Adjust this value if you want it lower/higher)
+
+        // Header: Logo e nome app in alto
         Row(
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,  // This centers the Logo and Text horizontally
             modifier = Modifier.fillMaxWidth()
         ) {
             Image(
                 painter = painterResource(id = R.drawable.snaptrip_logo),
                 contentDescription = "Logo",
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(56.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
