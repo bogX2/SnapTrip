@@ -384,20 +384,25 @@ fun JournalGridItem(entry: JournalEntry, onClick: () -> Unit) {
     ) {
         Box(Modifier.fillMaxSize()) {
             if (entry.photoBase64 != null) {
-                val bitmap = remember(entry.photoBase64) {
-                    try {
-                        val imageBytes = Base64.decode(entry.photoBase64, Base64.DEFAULT)
-                        BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                    } catch (e: Exception) { null }
-                }
-                if (bitmap != null) {
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+                // SMART CHECK
+                val isUrl = entry.photoBase64!!.startsWith("http")
+
+                AsyncImage(
+                    model = if (isUrl) {
+                        entry.photoBase64
+                    } else {
+                        // Fallback for old Base64 data
+                        remember(entry.photoBase64) {
+                            try {
+                                val imageBytes = Base64.decode(entry.photoBase64, Base64.DEFAULT)
+                                BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                            } catch (e: Exception) { null }
+                        }
+                    },
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
             } else {
                 // Se non c'è foto, mostra la nota come testo
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
@@ -438,40 +443,68 @@ fun FullScreenImage(entry: JournalEntry, onDismiss: () -> Unit, onEdit: () -> Un
                 ) { /* Do nothing */ },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            val bitmap = remember(entry.photoBase64) {
-                try {
-                    val imageBytes = Base64.decode(entry.photoBase64, Base64.DEFAULT)
-                    BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                } catch (e: Exception) { null }
-            }
+            val photoString = entry.photoBase64
 
-            if (bitmap != null) {
-                // Immagine più grande possibile
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = false) // Occupa spazio ma non forza se non serve
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Fit // Adatta mantenendo proporzioni
-                )
+            // --- UPDATED IMAGE LOGIC START ---
+            if (photoString != null) {
+                // 1. Common modifier for both Image types
+                val imageModifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false) // Occupa spazio ma non forza se non serve
+                    .clip(RoundedCornerShape(8.dp))
+
+                // 2. Smart Check: URL vs Base64
+                if (photoString.startsWith("http")) {
+                    // CASE A: It is a Firebase URL
+                    AsyncImage(
+                        model = photoString,
+                        contentDescription = null,
+                        modifier = imageModifier,
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    // CASE B: It is Legacy Base64
+                    val bitmap = remember(photoString) {
+                        try {
+                            val imageBytes = Base64.decode(photoString, Base64.DEFAULT)
+                            BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                        } catch (e: Exception) { null }
+                    }
+
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = imageModifier,
+                            contentScale = ContentScale.Fit
+                        )
+                    } else {
+                        // Fallback if decoding fails
+                        Icon(
+                            Icons.Default.Image,
+                            contentDescription = null,
+                            tint = Color.Gray,
+                            modifier = Modifier.size(120.dp)
+                        )
+                    }
+                }
             } else {
-                // Fallback icona grande se non c'è foto (solo testo)
+                // Fallback if photo is null
                 Icon(
-                    Icons.Default.Image, 
-                    contentDescription = null, 
+                    Icons.Default.Image,
+                    contentDescription = null,
                     tint = Color.Gray,
                     modifier = Modifier.size(120.dp)
                 )
             }
+            // --- UPDATED IMAGE LOGIC END ---
 
             Spacer(Modifier.height(24.dp))
 
             // Testo scorrevole se lungo
             Text(
-                entry.text, 
-                color = Color.White, 
+                entry.text,
+                color = Color.White,
                 style = MaterialTheme.typography.headlineSmall,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )

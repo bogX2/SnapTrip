@@ -48,8 +48,9 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     private val _saveSuccess = MutableStateFlow<Boolean>(false)
     val saveSuccess = _saveSuccess.asStateFlow()
     
-    private val _coverPhotoBase64 = MutableStateFlow<String?>(null)
-    val coverPhotoBase64 = _coverPhotoBase64.asStateFlow()
+    //private val _coverPhotoBase64 = MutableStateFlow<String?>(null)
+    //val coverPhotoBase64 = _coverPhotoBase64.asStateFlow()
+    private var pendingCoverPhoto: Bitmap? = null
 
     private val _userTrips = MutableStateFlow<List<TripResponse>>(emptyList())
     val userTrips = _userTrips.asStateFlow()
@@ -202,6 +203,17 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
                 Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
             }
+
+            _isLoading.value = true
+
+            // 1. UPLOAD PHOTO (If exists)
+            var photoUrl: String? = null
+            if (photo != null) {
+                val path = "journal/$tripId/${System.currentTimeMillis()}.jpg"
+                val uploadResult = repository.uploadImageToCloud(photo, path)
+                photoUrl = uploadResult.getOrNull()
+            }
+
             //ogni entry del diario ha foto e nome del viaggio
             val entry = JournalEntry(text = text, photoBase64 = photoBase64)
             repository.saveJournalEntry(tripId, entry)
@@ -229,10 +241,11 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     // --- ALTRE FUNZIONI ESISTENTI (Invariate) ---
     //funzione per mettere una foto di copertina al viaggio
     fun setCoverPhoto(bitmap: Bitmap) {
-        val outputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
-        val byteArray = outputStream.toByteArray()
-        _coverPhotoBase64.value = Base64.encodeToString(byteArray, Base64.DEFAULT)
+        //val outputStream = ByteArrayOutputStream()
+        //bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+        //val byteArray = outputStream.toByteArray()
+        //_coverPhotoBase64.value = Base64.encodeToString(byteArray, Base64.DEFAULT)
+        pendingCoverPhoto = bitmap
     }
 
     //funzione per caricare tutti i viaggi dell'utente
@@ -290,6 +303,18 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
             val daysInt = days.toIntOrNull() ?: 1
 
             try {
+                // UPLOAD COVER PHOTO (If exists)
+                var coverUrl: String? = null
+                if (pendingCoverPhoto != null) {
+                    // Create a unique path: "covers/{user_id}/{timestamp}.jpg"
+                    val userId = repository.getUserTrips().getOrNull()?.firstOrNull()?.firestoreId ?: "temp_user" // Simplified user ID check or use Auth
+                    val path = "covers/${System.currentTimeMillis()}.jpg"
+
+                    val uploadResult = repository.uploadImageToCloud(pendingCoverPhoto!!, path)
+                    coverUrl = uploadResult.getOrNull()
+                }
+
+
                 val request = TripRequest(name, daysInt, hotel, places)
                 val response = RetrofitClient.instance.createTrip(request)
 
@@ -297,13 +322,15 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
                     val body = response.body()!!
                     if (body.status == "success") {
 
-                        // FIX: Force firestoreId to be an empty string if Gson left it null
+                        // Force firestoreId to be an empty string if Gson left it null
                         // We cast to Any? to safely check for null on a non-null type
                         if ((body.firestoreId as Any?) == null) {
                             body.firestoreId = ""
                         }
 
-                        body.coverPhoto = _coverPhotoBase64.value
+                        // SET THE URL instead of Base64
+                        body.coverPhoto = coverUrl   // This holds the http link now
+
                         body.lifecycleStatus = "DRAFT"
                         _tripResult.value = body 
                     } else {
@@ -470,6 +497,6 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
         _tripResult.value = null
         _error.value = null
         _saveSuccess.value = false
-        _coverPhotoBase64.value = null
+        //_coverPhotoBase64.value = null
     }
 }

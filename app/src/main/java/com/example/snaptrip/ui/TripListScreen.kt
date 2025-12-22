@@ -183,25 +183,25 @@ fun TripItem(
             Box(Modifier.height(200.dp)) {
                 // Immagine di copertina
                 if (trip.coverPhoto != null) {
-                    val bitmap = remember(trip.coverPhoto) {
-                        try {
-                            val imageBytes = android.util.Base64.decode(trip.coverPhoto, android.util.Base64.DEFAULT)
-                            BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                        } catch (e: Exception) {
-                            null
-                        }
-                    }
+                    // SMART CHECK: Is it a URL (new) or Base64 (old)?
+                    val isUrl = trip.coverPhoto!!.startsWith("http")
 
-                    if (bitmap != null) {
-                        AsyncImage(
-                            model = bitmap,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer))
-                    }
+                    AsyncImage(
+                        model = if (isUrl) {
+                            trip.coverPhoto // Load URL directly
+                        } else {
+                            // Backward compatibility: Decode Base64 on the fly
+                            remember(trip.coverPhoto) {
+                                try {
+                                    val imageBytes = android.util.Base64.decode(trip.coverPhoto, android.util.Base64.DEFAULT)
+                                    BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                                } catch (e: Exception) { null }
+                            }
+                        },
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 } else {
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer))
                 }

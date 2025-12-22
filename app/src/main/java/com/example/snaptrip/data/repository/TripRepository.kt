@@ -1,5 +1,6 @@
 package com.example.snaptrip.data.repository
 
+import android.graphics.Bitmap
 import android.util.Log
 import com.example.snaptrip.data.local.TripDao
 import com.example.snaptrip.data.model.JournalEntry
@@ -8,11 +9,16 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.storage.FirebaseStorage
+import java.io.ByteArrayOutputStream
 
 class TripRepository(private val tripDao: TripDao? = null) {
 
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+
+    // Initialize Storage
+    private val storage = FirebaseStorage.getInstance()
 
     // Salva il viaggio nella sotto-collezione "trips" dell'utente corrente e anche nel database locale
     suspend fun saveTripToFirestore(trip: TripResponse): Result<String> {
@@ -160,6 +166,28 @@ class TripRepository(private val tripDao: TripDao? = null) {
                 collectionRef.add(entry).await()
             }
             Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Upload Image
+    suspend fun uploadImageToCloud(bitmap: Bitmap, path: String): Result<String> {
+        return try {
+            val storageRef = storage.reference.child(path)
+
+            // Compress image to JPEG
+            val baos = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos) // 80% quality
+            val data = baos.toByteArray()
+
+            // Upload
+            storageRef.putBytes(data).await()
+
+            // Get the Download URL
+            val downloadUrl = storageRef.downloadUrl.await()
+
+            Result.success(downloadUrl.toString())
         } catch (e: Exception) {
             Result.failure(e)
         }
