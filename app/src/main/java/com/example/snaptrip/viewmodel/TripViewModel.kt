@@ -23,10 +23,15 @@ import java.io.ByteArrayOutputStream
 import java.util.Collections
 import com.example.snaptrip.data.remote.WeatherClient
 import android.content.SharedPreferences
+import com.example.snaptrip.data.local.AppDatabase
 
 class TripViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
-    private val repository = TripRepository()
+    // 1. Initialize DB and DAO
+    private val database = AppDatabase.getDatabase(application)
+    private val tripDao = database.tripDao()
+
+    private val repository = TripRepository(tripDao)
     private val sensorManager = application.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private var stepSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
 
@@ -136,10 +141,15 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     // --- WEATHER LOGIC ---
     fun fetchRealTimeWeather(lat: Double, lon: Double) {
         viewModelScope.launch {
+            // FIRST: Check if we have cached weather in the current trip object
+            val currentTrip = _tripResult.value
+            if (currentTrip?.weather != null) {
+                _weatherTemp.value = currentTrip.weather!!.temp
+                _weatherInfo.value = currentTrip.weather
+            }
+            // Try to fetch fresh data
             try {
-
                 val apiKey = BuildConfig.OPENWEATHER_KEY
-
                 val response = WeatherClient.instance.getCurrentWeather(lat, lon, apiKey)
 
                 if (response.isSuccessful && response.body() != null) {
@@ -158,7 +168,9 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                // Handle error (optional: set _weatherTemp to 0 or null)
+                // If it fails (Offline), we simply do nothing.
+                // Because of step 1, _weatherTemp is already holding the old valid temperature
+                // instead of resetting to 0.
             }
         }
     }
@@ -225,16 +237,42 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
 
     //funzione per caricare tutti i viaggi dell'utente
     fun loadUserTrips() {
+        _error.value = null   // Reset error when entering the list
         viewModelScope.launch {
             _isLoading.value = true
+
+            // 1. FAST: Load from Local DB immediately so the user sees data instantly
+            val localTrips = tripDao.getAllTrips()
+            if (localTrips.isNotEmpty()) {
+                _userTrips.value = localTrips
+                // Turn off loading immediately if we have data to show
+                _isLoading.value = false
+            }
+
+            // 2. SLOW: Sync with Network in the background
+            // The repository will update the local DB if it succeeds
             val result = repository.getUserTrips()
-            result.onSuccess { _userTrips.value = it }
-            result.onFailure { _error.value = "Failed to load trips: ${it.message}" }
+
+            result.onSuccess {
+                // Update the UI with the fresh network data
+                _userTrips.value = it
+            }
+
+            result.onFailure {
+                // If network fails, we don't need to do anything because
+                // we already showed the local data in step 1.
+                // Just log the error if you want.
+                if (localTrips.isEmpty()) {
+                    _error.value = "Failed to load trips: ${it.message}"
+                }
+            }
+
             _isLoading.value = false
         }
     }
 
     fun selectTrip(trip: TripResponse) {
+        _error.value = null   // Reset error when switching to Itinerary
         _tripResult.value = trip
     }
 
@@ -258,6 +296,13 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
                     if (body.status == "success") {
+
+                        // FIX: Force firestoreId to be an empty string if Gson left it null
+                        // We cast to Any? to safely check for null on a non-null type
+                        if ((body.firestoreId as Any?) == null) {
+                            body.firestoreId = ""
+                        }
+
                         body.coverPhoto = _coverPhotoBase64.value
                         body.lifecycleStatus = "DRAFT"
                         _tripResult.value = body 
@@ -415,6 +460,10 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
         currentItinerary[toDayIndex] = toDay.copy(places = newToPlaces)
         
         _tripResult.value = currentTrip.copy(itinerary = currentItinerary)
+    }
+
+    fun clearError() {
+        _error.value = null
     }
 
     fun clearResult() {

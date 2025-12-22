@@ -86,6 +86,8 @@ fun ItineraryScreen(
     LaunchedEffect(error) {
         if (error != null) {
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+            // Clear the error immediately after showing it
+            viewModel.clearError()
         }
     }
 

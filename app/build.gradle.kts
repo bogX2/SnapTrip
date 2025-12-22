@@ -7,6 +7,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     // Add the Google services Gradle plugin
     id("com.google.gms.google-services")
+
+    id("kotlin-kapt")
 }
 
 val localProperties = Properties()
@@ -93,6 +95,15 @@ dependencies {
 
     // Reorderable List (Drag & Drop)
     implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
+
+    // ROOM DATABASE
+    val room_version = "2.6.1"
+    implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+    kapt("androidx.room:room-compiler:$room_version") // Use 'ksp' if you migrated, otherwise 'kapt'
+
+    // GSON (For converting Lists to String in DB)
+    implementation("com.google.code.gson:gson:2.10.1")
 
 
     testImplementation(libs.junit)

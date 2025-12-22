@@ -1,5 +1,7 @@
 package com.example.snaptrip.data.model
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
 import com.google.gson.annotations.SerializedName
 import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.Exclude
@@ -13,6 +15,7 @@ data class TripRequest(
 )
 
 // Risposta dal server e oggetto salvato su Firestore
+@Entity(tableName = "trips")
 data class TripResponse(
     var status: String = "",
     var trip_name: String = "",
@@ -22,11 +25,11 @@ data class TripResponse(
     var coverPhoto: String? = null,
     var lifecycleStatus: String = "DRAFT", // Trip Lifecycle Status (Default is DRAFT)
 
-
+    @PrimaryKey
     //campo che contiene l'id del documento su Firestore che indica il viaggio
-    @get:Exclude var firestoreId: String? = null
+    @get:Exclude var firestoreId: String = ""
 ) {
-    constructor() : this("", "", null, ArrayList(), null, null, "DRAFT")
+    constructor() : this("", "", null, ArrayList(), null, null, "DRAFT", "")
 }
 
 data class WeatherInfo(

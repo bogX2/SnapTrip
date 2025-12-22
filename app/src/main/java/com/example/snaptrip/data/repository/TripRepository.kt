@@ -1,6 +1,7 @@
 package com.example.snaptrip.data.repository
 
 import android.util.Log
+import com.example.snaptrip.data.local.TripDao
 import com.example.snaptrip.data.model.JournalEntry
 import com.example.snaptrip.data.model.TripResponse
 import com.google.firebase.auth.FirebaseAuth
@@ -8,32 +9,37 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
 
-class TripRepository {
+class TripRepository(private val tripDao: TripDao? = null) {
 
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
-    // Salva il viaggio nella sotto-collezione "trips" dell'utente corrente
+    // Salva il viaggio nella sotto-collezione "trips" dell'utente corrente e anche nel database locale
     suspend fun saveTripToFirestore(trip: TripResponse): Result<String> {
         val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
 
         return try {
-            val tripsCollection = db.collection("users")
-                .document(userId)
-                .collection("trips")
+            val tripsCollection = db.collection("users").document(userId).collection("trips")
 
-            // Se abbiamo già un ID, aggiorniamo il documento esistente
-            if (trip.firestoreId != null) {
+            // FIX: Safer check. If ID is null (Gson bug) or blank, treat as new trip.
+            val hasValidId = (trip.firestoreId as String?)?.isNotBlank() == true
+
+            val docId = if (hasValidId) {
                 Log.d("TripRepository", "Updating existing trip: ${trip.firestoreId}")
-                tripsCollection.document(trip.firestoreId!!).set(trip).await()
-                Result.success(trip.firestoreId!!)
+                tripsCollection.document(trip.firestoreId).set(trip).await()
+                trip.firestoreId
             } else {
-                // Altrimenti creiamo un nuovo documento
                 Log.d("TripRepository", "Creating new trip")
+                // This 'add' generates a clean, valid ID
                 val docRef = tripsCollection.add(trip).await()
-                trip.firestoreId = docRef.id
-                Result.success(docRef.id)
+                docRef.id
             }
+
+            // Update object and Local DB
+            trip.firestoreId = docId
+            tripDao?.insertTrip(trip)
+
+            Result.success(docId)
         } catch (e: Exception) {
             Log.e("TripRepository", "Error saving trip", e)
             Result.failure(e)
@@ -50,6 +56,8 @@ class TripRepository {
 
         return try {
             Log.d("TripRepository", "Fetching trips for user: $userId")
+
+            // 1. Try Network
             val snapshot = db.collection("users")
                 .document(userId)
                 .collection("trips")
@@ -63,11 +71,31 @@ class TripRepository {
                 trip?.firestoreId = doc.id 
                 trip
             }
+
+            // 2. If successful, update Local DB (Cache)
+            if (tripDao != null) {
+                Log.d("TripRepository", "Network success. Caching ${trips.size} trips locally.")
+                // Optional: tripDao.clearAll() // Uncomment if you want to remove deleted trips
+                tripDao.insertAll(trips)
+            }
             
             Result.success(trips)
+
         } catch (e: Exception) {
-            Log.e("TripRepository", "Error getting trips", e)
-            Result.failure(e)
+            // 3. Network Failed? Try Local DB
+            Log.e("TripRepository", "Network failed. Trying local DB...", e)
+
+            if (tripDao != null) {
+                val localTrips = tripDao.getAllTrips()
+                if (localTrips.isNotEmpty()) {
+                    Log.d("TripRepository", "Found ${localTrips.size} trips in local DB.")
+                    Result.success(localTrips)
+                } else {
+                    Result.failure(Exception("No internet and no local data available."))
+                }
+            } else {
+                Result.failure(e)
+            }
         }
     }
 
@@ -76,12 +104,16 @@ class TripRepository {
         val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
 
         return try {
+            // Delete from Network
             db.collection("users")
                 .document(userId)
                 .collection("trips")
                 .document(tripId)
                 .delete()
                 .await()
+
+            // Delete from Local
+            tripDao?.deleteTripById(tripId)
             
             Log.d("TripRepository", "Trip deleted: $tripId")
             Result.success(Unit)

@@ -70,11 +70,14 @@ fun TripListScreen(
 
     // TRIGGER SNACKBAR WHEN ERROR OCCURS
     LaunchedEffect(errorMessage) {
-        errorMessage?.let {
+        if (errorMessage != null) {
+            // 1. Show the message
             snackbarHostState.showSnackbar(
-                message = it,
+                message = errorMessage!!,
                 duration = SnackbarDuration.Short
             )
+            // 2. IMMEDIATELY clear it from the ViewModel so it doesn't show again
+            viewModel.clearError()
         }
     }
 

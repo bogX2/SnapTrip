@@ -163,7 +163,7 @@ fun SnapTripApp(placesClient: PlacesClient) { // AGGIUNTO PARAMETRO
                 ItineraryScreen(
                     viewModel = tripViewModel,
                     onBack = {
-                        //tripViewModel.clearResult()
+                        tripViewModel.clearResult()
                         navController.popBackStack()
                     }
                 )
