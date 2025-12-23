@@ -198,6 +198,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
 
     fun addJournalEntry(tripId: String, text: String, photo: Bitmap?) {
         viewModelScope.launch {
+            // Fallback method
             val photoBase64 = photo?.let { bitmap ->
                 val outputStream = ByteArrayOutputStream()
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
@@ -214,10 +215,24 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
                 photoUrl = uploadResult.getOrNull()
             }
 
+            // Use photoUrl if available! Only use photoBase64 as backup.
+            val finalPhotoData = photoUrl ?: photoBase64
+
             //ogni entry del diario ha foto e nome del viaggio
-            val entry = JournalEntry(text = text, photoBase64 = photoBase64)
-            repository.saveJournalEntry(tripId, entry)
-            loadJournal(tripId) // Ricarica
+            val entry = JournalEntry(text = text, photoBase64 = finalPhotoData)
+            val saveResult = repository.saveJournalEntry(tripId, entry)
+
+            if (saveResult.isSuccess) {
+                // Success! Reload the list
+                loadJournal(tripId)
+            } else {
+                // FAILURE! Show why.
+                val e = saveResult.exceptionOrNull()
+                _error.value = "Save Failed: ${e?.message}"
+
+                // Helpful Debug Log
+                android.util.Log.e("TripViewModel", "Failed to save journal entry", e)
+            }
         }
     }
     

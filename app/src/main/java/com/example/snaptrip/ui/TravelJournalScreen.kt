@@ -53,6 +53,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.ui.res.painterResource
+
 //import androidx.activity.result.contract.ActivityResultContracts
 //import android.os.Build
 
@@ -81,6 +83,8 @@ fun TravelJournalScreen(
 
     val context = LocalContext.current
 
+    val error by viewModel.error.collectAsState()
+
     // 1. Setup Permission Launcher
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -88,6 +92,14 @@ fun TravelJournalScreen(
         if (isGranted) {
             //viewModel.resetStepCounter()
             // Now We do NOT reset steps. The sensor will simply pick up where it left off.
+        }
+    }
+
+    // Show a Toast when an error occurs
+    LaunchedEffect(error) {
+        if (error != null) {
+            android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_LONG).show()
+            viewModel.clearError()
         }
     }
 
@@ -401,7 +413,11 @@ fun JournalGridItem(entry: JournalEntry, onClick: () -> Unit) {
                     },
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+
+                    // ADD THIS: Visual Feedback for loading/errors
+                    error = painterResource(android.R.drawable.ic_menu_report_image), // Built-in android error icon
+                    placeholder = painterResource(android.R.drawable.ic_menu_gallery) // Built-in placeholder
                 )
             } else {
                 // Se non c'è foto, mostra la nota come testo

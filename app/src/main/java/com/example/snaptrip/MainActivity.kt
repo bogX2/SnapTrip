@@ -163,7 +163,14 @@ fun SnapTripApp(placesClient: PlacesClient) { // AGGIUNTO PARAMETRO
                 ItineraryScreen(
                     viewModel = tripViewModel,
                     onBack = {
-                        tripViewModel.clearResult()
+                        // If we are returning to "journal", we MUST keep the data alive.
+                        // If we are returning to "create_trip" or lists, we MUST clear it.
+                        val previousRoute = navController.previousBackStackEntry?.destination?.route
+
+                        if (previousRoute != "journal") {
+                            tripViewModel.clearResult()
+                        }
+
                         navController.popBackStack()
                     }
                 )
