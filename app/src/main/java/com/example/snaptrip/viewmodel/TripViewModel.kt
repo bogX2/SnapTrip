@@ -170,6 +170,16 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
                         iconCode = apiData.weather.firstOrNull()?.icon ?: ""
                     )
                     _weatherInfo.value = info
+
+                    // Persist to Local Database
+                    if (currentTrip != null) {
+                        currentTrip.weather = info // Update the object in memory
+                        //tripDao.insertTrip(currentTrip) // Update the Local DB (Room)
+                        repository.saveTripToFirestore(currentTrip)
+
+                        // Optional: You can also update _tripResult to reflect the change
+                        // _tripResult.value = currentTrip
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -192,7 +202,6 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     fun loadJournal(tripId: String) {
         // Check if we are switching to a NEW trip
         if (lastLoadedJournalId != tripId) {
-            // If IDs are different, wipe the old data INSTANTLY.
             // This prevents Trip A's photos from appearing temporarily in Trip B.
             _journalEntries.value = emptyList()
             lastLoadedJournalId = tripId
@@ -220,26 +229,22 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
             val result = repository.getJournalEntries(tripId)
 
             result.onSuccess {
-                // Network success: Update the UI with the freshest data
-                //_journalEntries.value = it  (This overwrites local unsynced items with the older cloud version)
-
-                // The repository has already inserted the network items into the DB.
-                // So we just RELOAD from the DB to get the "Merged" list (Local + Network).
+                // Fetch merged data from DB
                 val mergedEntries = journalDao.getEntriesForTrip(tripId)
                 _journalEntries.value = mergedEntries
-
                 _isLoading.value = false
             }
-
             result.onFailure {
-                // Network failed (Offline):
-                // We don't need to do anything because Step 1 already showed the local data.
-                // We only log an error if the local cache was ALSO empty.
-                if (cachedEntries.isEmpty()) {
-                    _error.value = "Offline: No memories found."
-                }
+                // Handle error
                 _isLoading.value = false
             }
+
+
+
+
+
+
+
         }
     }
 
