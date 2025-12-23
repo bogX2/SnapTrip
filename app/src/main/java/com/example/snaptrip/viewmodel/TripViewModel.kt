@@ -24,14 +24,16 @@ import java.util.Collections
 import com.example.snaptrip.data.remote.WeatherClient
 import android.content.SharedPreferences
 import com.example.snaptrip.data.local.AppDatabase
+import kotlinx.coroutines.withTimeoutOrNull
 
 class TripViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
     // 1. Initialize DB and DAO
     private val database = AppDatabase.getDatabase(application)
     private val tripDao = database.tripDao()
+    private val journalDao = database.journalDao()
 
-    private val repository = TripRepository(tripDao)
+    private val repository = TripRepository(tripDao, journalDao)
     private val sensorManager = application.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private var stepSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
 
@@ -58,6 +60,8 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     // Stati per il Diario
     private val _journalEntries = MutableStateFlow<List<JournalEntry>>(emptyList())
     val journalEntries = _journalEntries.asStateFlow()
+
+    private var lastLoadedJournalId: String? = null
 
     // Get SharedPreferences
     private val prefs: SharedPreferences = application.getSharedPreferences("snap_trip_prefs", Context.MODE_PRIVATE)
@@ -186,52 +190,114 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     // --- DIARIO ---
     //funzione per prendere un viaggio specifico dell'utente
     fun loadJournal(tripId: String) {
-        // Restore the last known step count immediately
-        val lastKnownSteps = prefs.getInt("steps_saved_value_$tripId", 0)
-        _steps.value = lastKnownSteps
+        // Check if we are switching to a NEW trip
+        if (lastLoadedJournalId != tripId) {
+            // If IDs are different, wipe the old data INSTANTLY.
+            // This prevents Trip A's photos from appearing temporarily in Trip B.
+            _journalEntries.value = emptyList()
+            lastLoadedJournalId = tripId
+        }
 
         viewModelScope.launch {
+            _isLoading.value = true
+
+            // Load what we have locally IMMEDIATELY
+            val cachedEntries = journalDao.getEntriesForTrip(tripId)
+
+            if (cachedEntries.isNotEmpty()) {
+                // If we have data, show it immediately!
+                _journalEntries.value = cachedEntries
+            } else {
+                // Only clear if we really have nothing, to avoid showing previous trip's data
+                _journalEntries.value = emptyList()
+            }
+
+            // Restore step count...
+            val lastKnownSteps = prefs.getInt("steps_saved_value_$tripId", 0)
+            _steps.value = lastKnownSteps
+
+            // FETCH NEW DATA (Sync with Cloud)
             val result = repository.getJournalEntries(tripId)
-            result.onSuccess { _journalEntries.value = it }
+
+            result.onSuccess {
+                // Network success: Update the UI with the freshest data
+                //_journalEntries.value = it  (This overwrites local unsynced items with the older cloud version)
+
+                // The repository has already inserted the network items into the DB.
+                // So we just RELOAD from the DB to get the "Merged" list (Local + Network).
+                val mergedEntries = journalDao.getEntriesForTrip(tripId)
+                _journalEntries.value = mergedEntries
+
+                _isLoading.value = false
+            }
+
+            result.onFailure {
+                // Network failed (Offline):
+                // We don't need to do anything because Step 1 already showed the local data.
+                // We only log an error if the local cache was ALSO empty.
+                if (cachedEntries.isEmpty()) {
+                    _error.value = "Offline: No memories found."
+                }
+                _isLoading.value = false
+            }
         }
     }
 
     fun addJournalEntry(tripId: String, text: String, photo: Bitmap?) {
         viewModelScope.launch {
-            // Fallback method
-            val photoBase64 = photo?.let { bitmap ->
-                val outputStream = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
-                Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
-            }
-
             _isLoading.value = true
 
-            // 1. UPLOAD PHOTO (If exists)
-            var photoUrl: String? = null
-            if (photo != null) {
-                val path = "journal/$tripId/${System.currentTimeMillis()}.jpg"
-                val uploadResult = repository.uploadImageToCloud(photo, path)
-                photoUrl = uploadResult.getOrNull()
-            }
+            try{
+                // Fallback method
+                //val photoBase64 = photo?.let { bitmap ->
+                //    val outputStream = ByteArrayOutputStream()
+                //    bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+                //    Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
+                //}
 
-            // Use photoUrl if available! Only use photoBase64 as backup.
-            val finalPhotoData = photoUrl ?: photoBase64
+                // 1. UPLOAD PHOTO (If exists)
+                var photoUrl: String? = null
 
-            //ogni entry del diario ha foto e nome del viaggio
-            val entry = JournalEntry(text = text, photoBase64 = finalPhotoData)
-            val saveResult = repository.saveJournalEntry(tripId, entry)
+                if (photo != null) {
+                    val path = "journal/$tripId/${System.currentTimeMillis()}.jpg"
+                    val uploadResult = repository.uploadImageToCloud(photo, path)
 
-            if (saveResult.isSuccess) {
-                // Success! Reload the list
-                loadJournal(tripId)
-            } else {
-                // FAILURE! Show why.
-                val e = saveResult.exceptionOrNull()
-                _error.value = "Save Failed: ${e?.message}"
+                    // If upload fails (e.g. network drops mid-operation), we stop here.
+                    if (uploadResult.isFailure) {
+                        throw Exception("Image upload failed. Check your connection.")
+                    }
 
-                // Helpful Debug Log
-                android.util.Log.e("TripViewModel", "Failed to save journal entry", e)
+                    photoUrl = uploadResult.getOrNull()
+                }
+
+                // Use photoUrl if available! Only use photoBase64 as backup.
+                //val finalPhotoData = photoUrl ?: photoBase64
+
+                //ogni entry del diario ha foto e nome del viaggio
+                val entry = JournalEntry(text = text, photoBase64 = photoUrl)
+
+                // Generate ID if needed (for Room consistency)
+                if (entry.firestoreId.isEmpty()) {
+                    entry.firestoreId = java.util.UUID.randomUUID().toString()
+                }
+
+                val saveResult = repository.saveJournalEntry(tripId, entry)
+
+                if (saveResult.isSuccess) {
+                    // Success! Reload the list
+                    loadJournal(tripId)
+                } else {
+                    // FAILURE! Show why.
+                    val e = saveResult.exceptionOrNull()
+                    _error.value = "Save Failed: ${e?.message}"
+
+                    // Helpful Debug Log
+                    android.util.Log.e("TripViewModel", "Failed to save journal entry", e)
+                }
+            } catch (e: Exception) {
+                _error.value = e.message ?: "An error occurred"
+            } finally {
+                _isLoading.value = false
             }
         }
     }
@@ -302,6 +368,9 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     fun selectTrip(trip: TripResponse) {
         _error.value = null   // Reset error when switching to Itinerary
         _tripResult.value = trip
+
+        _journalEntries.value = emptyList()  // Clear the journal immediately to prevent "ghosting" on the next screen
+        lastLoadedJournalId = null
     }
 
     fun createTrip(name: String, days: String, hotel: String, places: List<String>) {

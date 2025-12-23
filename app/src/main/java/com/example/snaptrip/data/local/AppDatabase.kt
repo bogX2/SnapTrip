@@ -6,11 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.example.snaptrip.data.model.TripResponse
+import com.example.snaptrip.data.model.JournalEntry
 
-@Database(entities = [TripResponse::class], version = 1, exportSchema = false)
-@TypeConverters(Converters::class) // Register the converters we created
+@Database(entities = [TripResponse::class, JournalEntry::class], version = 2, exportSchema = false)
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun tripDao(): TripDao
+
+    abstract fun journalDao(): JournalDao
 
     companion object {
         @Volatile
@@ -22,7 +25,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "snaptrip_local_db"
-                ).build()
+                )
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }

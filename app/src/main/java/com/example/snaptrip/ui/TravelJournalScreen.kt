@@ -54,6 +54,10 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.res.painterResource
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.widget.Toast
 
 //import androidx.activity.result.contract.ActivityResultContracts
 //import android.os.Build
@@ -84,6 +88,7 @@ fun TravelJournalScreen(
     val context = LocalContext.current
 
     val error by viewModel.error.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
 
     // 1. Setup Permission Launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -146,7 +151,15 @@ fun TravelJournalScreen(
         floatingActionButton = {
             if (selectedEntry == null) {
                 FloatingActionButton(
-                    onClick = { showAddDialog = true },
+                    onClick = {
+                        // NEW LOGIC: Check connection before opening dialog
+                        if (isInternetAvailable(context)) {
+                            showAddDialog = true
+                        } else {
+                            // Show feedback if offline
+                            Toast.makeText(context, "You need an internet connection to add memories.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     containerColor = MaterialTheme.colorScheme.primary
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Add Entry")
@@ -604,4 +617,12 @@ fun AddJournalEntryDialog(onDismiss: () -> Unit, onConfirm: (String, Bitmap?) ->
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+
+fun isInternetAvailable(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val network = connectivityManager.activeNetwork ?: return false
+    val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }

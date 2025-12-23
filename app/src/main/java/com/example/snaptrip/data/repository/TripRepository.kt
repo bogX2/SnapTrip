@@ -11,8 +11,9 @@ import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
 import com.google.firebase.storage.FirebaseStorage
 import java.io.ByteArrayOutputStream
+import com.example.snaptrip.data.local.JournalDao
 
-class TripRepository(private val tripDao: TripDao? = null) {
+class TripRepository(private val tripDao: TripDao? = null, private val journalDao: JournalDao? = null) {
 
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
@@ -142,32 +143,84 @@ class TripRepository(private val tripDao: TripDao? = null) {
                 .get().await()
 
             val entries = snapshot.documents.mapNotNull { doc ->
-                doc.toObject(JournalEntry::class.java)?.apply { firestoreId = doc.id }
+                // Previous technique
+                //doc.toObject(JournalEntry::class.java)?.apply { firestoreId = doc.id }
+
+                val entry = doc.toObject(JournalEntry::class.java)
+                // IMPORTANT: Manually set IDs for local DB
+                entry?.firestoreId = doc.id
+                entry?.tripId = tripId
+                entry
             }
+
+            // Network Success? Cache them Locally!
+            if (journalDao != null) {
+                journalDao.insertAll(entries)
+            }
+
             Result.success(entries)
+
         } catch (e: Exception) {
-            Result.failure(e)
+            // Network Failed? Load from Local DB
+            if (journalDao != null) {
+                val localEntries = journalDao.getEntriesForTrip(tripId)
+                if (localEntries.isNotEmpty()) {
+                    // Success (Offline Mode)
+                    Result.success(localEntries)
+                } else {
+                    // Truly empty or error
+                    Result.failure(e)
+                }
+            } else {
+                Result.failure(e)
+            }
         }
     }
 
     //permette di aggiornare il diario dell'utente se fa aggiornamento (tipo dell'itinerario)
     suspend fun saveJournalEntry(tripId: String, entry: JournalEntry): Result<Unit> {
         val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
+
+        // Generate a temporary ID if missing (Essential for Room Database)
+        if (entry.firestoreId.isEmpty()) {
+            entry.firestoreId = java.util.UUID.randomUUID().toString()
+        }
+        entry.tripId = tripId
+
         return try {
+            // Try Network Save
             val collectionRef = db.collection("users").document(userId)
                 .collection("trips").document(tripId)
                 .collection("journal")
 
-            if (entry.firestoreId != null) {
-                // UPDATE
-                collectionRef.document(entry.firestoreId!!).set(entry).await()
+            // Save to Network
+            val docRef = if (entry.firestoreId.isNotEmpty()) {
+                collectionRef.document(entry.firestoreId).set(entry).await()
+                collectionRef.document(entry.firestoreId)
             } else {
-                // CREATE
-                collectionRef.add(entry).await()
+                val addedDoc = collectionRef.add(entry).await()
+                addedDoc
             }
+
+            // Save to Local DB (Keep them in sync)
+            if (journalDao != null) {
+                entry.firestoreId = docRef.id // Ensure we have the ID
+                entry.tripId = tripId         // Ensure we have the Trip Link
+                journalDao.insertEntry(entry)
+            }
+
             Result.success(Unit)
+
         } catch (e: Exception) {
-            Result.failure(e)
+            // Network Failed (Offline) -> FORCE SAVE TO LOCAL
+            // This ensures the memory appears in the list even if we have no internet.
+            if (journalDao != null) {
+                journalDao.insertEntry(entry)
+                // We return success because from the user's perspective, it IS saved.
+                Result.success(Unit)
+            } else {
+                Result.failure(e)
+            }
         }
     }
 
