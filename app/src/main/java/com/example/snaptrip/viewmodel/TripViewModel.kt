@@ -269,7 +269,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
 
                     // If upload fails (e.g. network drops mid-operation), we stop here.
                     if (uploadResult.isFailure) {
-                        throw Exception("Image upload failed. Check your connection.")
+                        throw uploadResult.exceptionOrNull() ?: Exception("Unknown upload error")
                     }
 
                     photoUrl = uploadResult.getOrNull()
@@ -299,8 +299,9 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
                     // Helpful Debug Log
                     android.util.Log.e("TripViewModel", "Failed to save journal entry", e)
                 }
-            } catch (e: Exception) {
-                _error.value = e.message ?: "An error occurred"
+            } catch (e: Throwable) {
+                _error.value = "Error: ${e.message}"
+                android.util.Log.e("TripViewModel", "Crash prevented", e)
             } finally {
                 _isLoading.value = false
             }

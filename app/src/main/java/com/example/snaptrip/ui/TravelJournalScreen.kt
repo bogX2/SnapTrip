@@ -335,6 +335,7 @@ fun TravelJournalScreen(
 
     if (showAddDialog) {
         AddJournalEntryDialog(
+            tripName = tripName,
             onDismiss = { showAddDialog = false },
             onConfirm = { text, bitmap ->
                 viewModel.addJournalEntry(tripId, text, bitmap)
@@ -558,21 +559,46 @@ fun FullScreenImage(entry: JournalEntry, onDismiss: () -> Unit, onEdit: () -> Un
 }
 
 @Composable
-fun AddJournalEntryDialog(onDismiss: () -> Unit, onConfirm: (String, Bitmap?) -> Unit) {
+fun AddJournalEntryDialog(tripName: String, onDismiss: () -> Unit, onConfirm: (String, Bitmap?) -> Unit) {
     var text by remember { mutableStateOf("") }
-    var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+    //var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    // STATE 1: The raw photo from Camera/Gallery
+    var originalBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    // STATE 2: The photo we show to the user (possibly with effects)
+    var displayBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
     val context = LocalContext.current
+
+    var isPostcardMode by remember { mutableStateOf(false) }
+
+    // REACTIVE LOGIC: Whenever 'isPostcardMode' OR 'originalBitmap' changes, update 'displayBitmap'
+    LaunchedEffect(isPostcardMode, originalBitmap) {
+        if (originalBitmap != null) {
+            displayBitmap = if (isPostcardMode) {
+                // Apply effect
+                com.example.snaptrip.utils.PostcardUtils.generatePostcard(originalBitmap!!, tripName)
+            } else {
+                // Show original
+                originalBitmap
+            }
+        }
+    }
+
 
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
-            val bitmap = if (Build.VERSION.SDK_INT < 28) MediaStore.Images.Media.getBitmap(context.contentResolver, it)
+            var bitmap = if (Build.VERSION.SDK_INT < 28) MediaStore.Images.Media.getBitmap(context.contentResolver, it)
             else ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, it))
-            selectedBitmap = bitmap
+
+            originalBitmap = bitmap
         }
     }
     
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
-        if (bitmap != null) selectedBitmap = bitmap
+        if (bitmap != null) {
+            originalBitmap = bitmap
+        }
     }
 
     AlertDialog(
@@ -587,15 +613,29 @@ fun AddJournalEntryDialog(onDismiss: () -> Unit, onConfirm: (String, Bitmap?) ->
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3
                 )
+
                 Spacer(Modifier.height(16.dp))
                 
-                if (selectedBitmap != null) {
+                if (displayBitmap != null) {
                     Image(
-                        bitmap = selectedBitmap!!.asImageBitmap(),
+                        bitmap = displayBitmap!!.asImageBitmap(),
                         contentDescription = null,
                         modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(8.dp)),
                         contentScale = ContentScale.Crop
                     )
+                }
+
+                // NEW: Postcard Switch UI
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                ) {
+                    Switch(
+                        checked = isPostcardMode,
+                        onCheckedChange = { isPostcardMode = it }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Postcard Mode \uD83D\uDDBC\uFE0F") // Frame icon
                 }
                 
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -611,7 +651,7 @@ fun AddJournalEntryDialog(onDismiss: () -> Unit, onConfirm: (String, Bitmap?) ->
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(text, selectedBitmap) }) { Text("Save") }
+            Button(onClick = { onConfirm(text, displayBitmap) }) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

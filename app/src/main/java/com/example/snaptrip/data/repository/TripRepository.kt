@@ -12,6 +12,8 @@ import kotlinx.coroutines.tasks.await
 import com.google.firebase.storage.FirebaseStorage
 import java.io.ByteArrayOutputStream
 import com.example.snaptrip.data.local.JournalDao
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class TripRepository(private val tripDao: TripDao? = null, private val journalDao: JournalDao? = null) {
 
@@ -226,23 +228,28 @@ class TripRepository(private val tripDao: TripDao? = null, private val journalDa
 
     // Upload Image
     suspend fun uploadImageToCloud(bitmap: Bitmap, path: String): Result<String> {
-        return try {
-            val storageRef = storage.reference.child(path)
+        return withContext(Dispatchers.IO) {
+            try {
+                val storageRef = storage.reference.child(path)
 
-            // Compress image to JPEG
-            val baos = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos) // 80% quality
-            val data = baos.toByteArray()
+                // 1. Compress image to JPEG (Heavy operation!)
+                val baos = ByteArrayOutputStream()
+                // Use 80% quality to reduce file size and upload time
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+                val data = baos.toByteArray()
 
-            // Upload
-            storageRef.putBytes(data).await()
+                // 2. Upload to Firebase
+                storageRef.putBytes(data).await()
 
-            // Get the Download URL
-            val downloadUrl = storageRef.downloadUrl.await()
+                // 3. Get the Download URL
+                val downloadUrl = storageRef.downloadUrl.await()
 
-            Result.success(downloadUrl.toString())
-        } catch (e: Exception) {
-            Result.failure(e)
+                // Return success
+                Result.success(downloadUrl.toString())
+            } catch (e: Throwable) {
+                e.printStackTrace()
+                Result.failure(Exception("Upload Failed: ${e.message}"))
+            }
         }
     }
 }
