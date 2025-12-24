@@ -58,6 +58,11 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.widget.Toast
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import com.example.snaptrip.ui.components.getWeatherIcon
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.ui.graphics.vector.ImageVector
 
 //import androidx.activity.result.contract.ActivityResultContracts
 //import android.os.Build
@@ -244,7 +249,7 @@ fun TravelJournalScreen(
                             .padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        WeatherWidget(temp = weatherTemp)
+                        WeatherWidget(weatherInfo = weatherInfo)
                         StepsWidget(steps = steps)
                     }
                 } else {
@@ -346,7 +351,7 @@ fun TravelJournalScreen(
 }
 
 @Composable
-fun WeatherWidget(temp: Int) {
+fun WeatherWidget(weatherInfo: com.example.snaptrip.data.model.WeatherInfo?) {
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.9f)),
@@ -358,11 +363,73 @@ fun WeatherWidget(temp: Int) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(Icons.Default.WbSunny, contentDescription = null, tint = Color(0xFFFFB300), modifier = Modifier.size(32.dp))
+            // 1. Get the data
+            val temp = weatherInfo?.temp ?: 0
+            val iconCode = weatherInfo?.iconCode
+            val description = weatherInfo?.description ?: "Offline"
+
+            // 2. Determine the correct vector icon (for offline/loading)
+            var loadFailed by remember { mutableStateOf(false) }
+
+            // 3. Build the online URL
+            val iconUrl = if (!iconCode.isNullOrEmpty())
+                "https://openweathermap.org/img/wn/${iconCode}@2x.png"
+            else null
+
+            if (iconUrl != null) {
+                // Try to load online image (or from cache)
+                AsyncImage(
+                    model = iconUrl,
+                    contentDescription = description,
+                    modifier = Modifier.size(48.dp),
+                    contentScale = ContentScale.Fit,
+                    // IMPORTANT: If offline and not in cache, show the correct Vector!
+                    onError = {
+                        // If offline, this triggers immediately
+                        loadFailed = true
+                    }
+                )
+            } else {
+                // Completely offline fallback (no code available)
+                // Get the specific icon for the code (e.g., "10d" -> WaterDrop)
+                val vectorIcon = getWeatherIconVector(iconCode)
+
+                Icon(
+                    imageVector = vectorIcon,
+                    contentDescription = null,
+                    tint = Color(0xFFFFB300),
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+
             Spacer(Modifier.height(4.dp))
+
+            // 4. Text Info
             Text("$temp°C", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Sunny", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            //Text(text = "Code: ${iconCode ?: "null"}", fontSize = 8.sp, color = Color.Red) // Uncomment to debug
+            Text(
+                description.replaceFirstChar { it.uppercase() },
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                maxLines = 1
+            )
         }
+    }
+}
+
+// Translate OpenWeatherMap codes to Android Icons for offline use
+fun getWeatherIconVector(code: String?): ImageVector {
+    return when (code) {
+        "01d", "01n" -> Icons.Default.WbSunny        // Clear sky
+        "02d", "02n" -> Icons.Default.WbCloudy       // Few clouds
+        "03d", "03n" -> Icons.Default.Cloud          // Scattered clouds
+        "04d", "04n" -> Icons.Outlined.Cloud         // Broken clouds
+        "09d", "09n" -> Icons.Default.Umbrella       // Showers
+        "10d", "10n" -> Icons.Default.WaterDrop      // Rain
+        "11d", "11n" -> Icons.Default.Thunderstorm   // Thunderstorm
+        "13d", "13n" -> Icons.Default.AcUnit         // Snow
+        "50d", "50n" -> Icons.Default.Waves          // Mist
+        else -> Icons.Default.WbSunny                // Default fallback
     }
 }
 

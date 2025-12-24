@@ -174,7 +174,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
                     // Persist to Local Database
                     if (currentTrip != null) {
                         currentTrip.weather = info // Update the object in memory
-                        //tripDao.insertTrip(currentTrip) // Update the Local DB (Room)
+                        tripDao.insertTrip(currentTrip) // Update the Local DB (Room)
                         repository.saveTripToFirestore(currentTrip)
 
                         // Optional: You can also update _tripResult to reflect the change

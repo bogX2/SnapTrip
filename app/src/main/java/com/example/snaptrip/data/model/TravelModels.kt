@@ -35,8 +35,9 @@ data class TripResponse(
 data class WeatherInfo(
     var temp: Int = 0,
     var description: String = "",
-    @SerializedName("icon_code") 
-    @get:PropertyName("icon_code")
+    @SerializedName("icon_code")
+    //@get:PropertyName("icon_code")
+    @PropertyName("icon_code")
     var iconCode: String = ""
 ) {
     constructor() : this(0, "", "")
