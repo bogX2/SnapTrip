@@ -59,7 +59,6 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.widget.Toast
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import com.example.snaptrip.ui.components.getWeatherIcon
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.ui.graphics.vector.ImageVector
