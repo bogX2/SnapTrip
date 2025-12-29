@@ -15,9 +15,9 @@ import java.util.Locale
 object PostcardUtils {
 
     /**
-     * Applies a "Vintage Postcard" effect: Sepia Filter + Watermark text
+     * Applies a "Vintage Postcard" effect: Sepia Filter + Watermark text + use ml kit for labeling the image
      */
-    fun generatePostcard(original: Bitmap, placeName: String): Bitmap {
+    fun generatePostcard(original: Bitmap, placeName: String, tags: List<String> = emptyList()): Bitmap {
 
         try {
             // 1. CRITICAL: FORCE SOFTWARE CONVERSION
@@ -53,7 +53,7 @@ object PostcardUtils {
             canvas.drawBitmap(scaledBitmap, 0f, 0f, paint)
 
             // 5. ADD WATERMARK
-            addWatermark(canvas, scaledBitmap.width, scaledBitmap.height, placeName)
+            addWatermark(canvas, scaledBitmap.width, scaledBitmap.height, placeName, tags)
 
             // 6. CLEANUP (Recycle intermediate bitmaps to free RAM)
             if (safeBitmap != original && !safeBitmap.isRecycled) safeBitmap.recycle()
@@ -69,10 +69,11 @@ object PostcardUtils {
         }
     }
 
-    private fun addWatermark(canvas: Canvas, width: Int, height: Int, placeName: String) {
+
+        private fun addWatermark(canvas: Canvas, width: Int, height: Int, placeName: String, tags: List<String>) {
         val paintText = Paint().apply {
             color = Color.WHITE
-            textSize = width * 0.05f // Responsive text size (5% of width)
+            textSize = width * 0.04f // Responsive text size (5% of width)
             isAntiAlias = true
             typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD_ITALIC)
             setShadowLayer(4f, 2f, 2f, Color.BLACK) // Shadow for readability
@@ -92,6 +93,19 @@ object PostcardUtils {
         // Draw Date
         paintText.textSize = width * 0.03f // Smaller font for date
         canvas.drawText(dateString, width - padding, height - padding, paintText)
+
+
+            // --- NUOVO: Disegna i Tag a SINISTRA ---
+            if (tags.isNotEmpty()) {
+                paintText.textAlign = Paint.Align.LEFT
+                paintText.textSize = width * 0.035f // Un po' più piccolo del luogo
+
+                // Unisci i tag con il simbolo #
+                val hashtagString = tags.joinToString(" ") { "#$it" }
+
+                // Disegna in basso a sinistra
+                canvas.drawText(hashtagString, padding, height - padding, paintText)
+            }
 
         // Optional: Draw a "Postcard Border"
         val borderPaint = Paint().apply {

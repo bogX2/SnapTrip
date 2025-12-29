@@ -106,6 +106,9 @@ dependencies {
     // GSON (For converting Lists to String in DB)
     implementation("com.google.code.gson:gson:2.10.1")
 
+    // ML Kit Image Labeling
+    implementation("com.google.mlkit:image-labeling:17.0.7")
+
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

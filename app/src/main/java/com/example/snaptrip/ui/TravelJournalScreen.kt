@@ -643,19 +643,33 @@ fun AddJournalEntryDialog(tripName: String, onDismiss: () -> Unit, onConfirm: (S
 
     var isPostcardMode by remember { mutableStateOf(false) }
 
+    // NUOVO: Stato per i tag rilevati
+    var detectedTags by remember { mutableStateOf<List<String>>(emptyList()) }
+
+
+    // 1. Quando cambia l'immagine originale, analizzala con ML Kit
+    LaunchedEffect(originalBitmap) {
+        if (originalBitmap != null) {
+            // Esegue l'analisi in background
+            detectedTags = com.example.snaptrip.utils.ImageLabelingHelper.getLabels(originalBitmap!!)
+        }
+    }
     // REACTIVE LOGIC: Whenever 'isPostcardMode' OR 'originalBitmap' changes, update 'displayBitmap'
-    LaunchedEffect(isPostcardMode, originalBitmap) {
+    // 2. Quando cambia lo switch O l'immagine O i tag, aggiorna l'anteprima
+    LaunchedEffect(isPostcardMode, originalBitmap, detectedTags) {
         if (originalBitmap != null) {
             displayBitmap = if (isPostcardMode) {
-                // Apply effect
-                com.example.snaptrip.utils.PostcardUtils.generatePostcard(originalBitmap!!, tripName)
+                // Genera cartolina con i tag!
+                com.example.snaptrip.utils.PostcardUtils.generatePostcard(
+                    originalBitmap!!,
+                    tripName,
+                    detectedTags // Passa i tag qui
+                )
             } else {
-                // Show original
                 originalBitmap
             }
         }
     }
-
 
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
