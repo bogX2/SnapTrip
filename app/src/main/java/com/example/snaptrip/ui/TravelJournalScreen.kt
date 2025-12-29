@@ -228,7 +228,12 @@ fun TravelJournalScreen(
                     if (isTripActive) {
                         Button(
                             onClick = {
-                                viewModel.endTrip(tripId)
+                                // ERROR WAS HERE: viewModel.endTrip(tripId)
+
+                                // FIX: Pass the 'selectedTrip' object safely
+                                selectedTrip?.let { trip ->
+                                    viewModel.endTrip(trip)
+                                }
                                 onBack() // Return to home after ending
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.8f)),

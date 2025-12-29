@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 import com.example.snaptrip.data.model.TripResponse
 import com.example.snaptrip.data.model.JournalEntry
 
-@Database(entities = [TripResponse::class, JournalEntry::class], version = 2, exportSchema = false)
+@Database(entities = [TripResponse::class, JournalEntry::class], version = 3, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun tripDao(): TripDao

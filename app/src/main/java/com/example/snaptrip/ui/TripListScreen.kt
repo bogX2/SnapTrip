@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.snaptrip.data.model.TripResponse
 import com.example.snaptrip.viewmodel.TripViewModel
+import androidx.compose.ui.text.style.TextAlign
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,12 +44,22 @@ fun TripListScreen(
     // Show only trips matching the requested status
     val trips = remember(allTrips, filterStatus) {
         if (filterStatus == "SAVED") {
-            allTrips.filter {  // In this way we show also the old trips
-                it.lifecycleStatus != "ACTIVE" && it.lifecycleStatus != "COMPLETED"
+            // --- PLANNED TRIPS ---
+            allTrips.filter {
+                it.lifecycleStatus != "ACTIVE" &&
+                        it.lifecycleStatus != "FINISHED" &&
+                        it.lifecycleStatus != "COMPLETED"
             }
         } else {
-            // For "Past Memories", we stay strict
-            allTrips.filter { it.lifecycleStatus == filterStatus }
+            // --- PAST MEMORIES ---
+            if (filterStatus == "FINISHED" || filterStatus == "COMPLETED") {
+                allTrips.filter {
+                    it.lifecycleStatus == "FINISHED" || it.lifecycleStatus == "COMPLETED"
+                }
+            } else {
+                // Fallback per altri filtri specifici (se ne avrai in futuro)
+                allTrips.filter { it.lifecycleStatus == filterStatus }
+            }
         }
     }
 
@@ -137,19 +148,21 @@ fun TripListScreen(
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TripItem(
-    trip: TripResponse, 
+    trip: TripResponse,
     isSelected: Boolean,
     onClick: () -> Unit,
     onViewItinerary: () -> Unit,
-    onOpenJournal: () -> Unit, // Parametro aggiunto
+    onOpenJournal: () -> Unit,
     onDelete: () -> Unit,
     onActivate: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    // Dialogo di conferma eliminazione
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -177,20 +190,23 @@ fun TripItem(
     Card(
         onClick = onClick,
         elevation = CardDefaults.cardElevation(4.dp),
-        modifier = Modifier.fillMaxWidth().animateContentSize() // Anima il cambio di dimensione
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp, horizontal = 16.dp) // Aggiunto un po' di margine esterno
+            .animateContentSize() // Anima il cambio di dimensione
     ) {
         Column {
             Box(Modifier.height(200.dp)) {
-                // Immagine di copertina
+                // --- Immagine di Copertina ---
                 if (trip.coverPhoto != null) {
-                    // SMART CHECK: Is it a URL (new) or Base64 (old)?
+                    // Controllo intelligente: è un URL (nuovo) o Base64 (vecchio)?
                     val isUrl = trip.coverPhoto!!.startsWith("http")
 
                     AsyncImage(
                         model = if (isUrl) {
-                            trip.coverPhoto // Load URL directly
+                            trip.coverPhoto // Carica URL direttamente
                         } else {
-                            // Backward compatibility: Decode Base64 on the fly
+                            // Compatibilità passata: Decodifica Base64 al volo
                             remember(trip.coverPhoto) {
                                 try {
                                     val imageBytes = android.util.Base64.decode(trip.coverPhoto, android.util.Base64.DEFAULT)
@@ -198,15 +214,16 @@ fun TripItem(
                                 } catch (e: Exception) { null }
                             }
                         },
-                        contentDescription = null,
+                        contentDescription = "Trip Cover",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
+                    // Placeholder se non c'è immagine
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer))
                 }
-                
-                // Overlay scuro per testo
+
+                // Overlay scuro per migliorare la leggibilità del testo
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -215,14 +232,22 @@ fun TripItem(
                         ))
                 )
 
-                // NEW: Status Badge (Top Left)
+                // --- BANNER DI STATO (PLANNED / ACTIVE / FINISHED) ---
+                // Determina colore e testo in base al lifecycleStatus
+                val status = trip.lifecycleStatus ?: "PLANNED"
+                val (badgeColor, badgeText) = when (status) {
+                    "ACTIVE" -> MaterialTheme.colorScheme.primary to "LIVE TRIP" // Verde/Primary per attivo
+                    "FINISHED" -> MaterialTheme.colorScheme.error to "FINISHED"  // Rosso/Error per finito
+                    else -> Color.Black.copy(alpha = 0.6f) to "PLANNED"          // Scuro per pianificato
+                }
+
                 Surface(
                     modifier = Modifier.padding(8.dp).align(Alignment.TopStart),
                     shape = MaterialTheme.shapes.small,
-                    color = if (trip.lifecycleStatus == "ACTIVE") MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.6f)
+                    color = badgeColor
                 ) {
                     Text(
-                        text = if (trip.lifecycleStatus == "ACTIVE") "LIVE TRIP" else "PLANNED",
+                        text = badgeText,
                         color = Color.White,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
@@ -230,7 +255,7 @@ fun TripItem(
                     )
                 }
 
-                // Pulsante Cancella
+                // Pulsante Cancella (Cestino)
                 IconButton(
                     onClick = { showDeleteDialog = true },
                     modifier = Modifier
@@ -245,7 +270,7 @@ fun TripItem(
                     )
                 }
 
-                // Info Viaggio
+                // --- Info Viaggio in basso ---
                 Column(
                     Modifier
                         .align(Alignment.BottomStart)
@@ -257,17 +282,31 @@ fun TripItem(
                         color = Color.White,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = "${trip.itinerary.size} Days",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Durata
+                        Text(
+                            text = "${trip.itinerary.size} Days",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+
+                        // Mostra i passi se presenti (utile per viaggi attivi o finiti)
+                        if (trip.steps > 0) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "• 👣 ${trip.steps} steps",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Green // Evidenzia i passi
+                            )
+                        }
+                    }
                 }
             }
 
-            // Sezione espandibile con i pulsanti
+            // --- Sezione Espandibile (Pulsanti) ---
             AnimatedVisibility(visible = isSelected) {
-                Column { // Changed Row to Column to stack the Start button
+                Column {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -293,8 +332,10 @@ fun TripItem(
                             Text("Travel Journal")
                         }
                     }
-                    // NEW: Start Trip Button (Only if not active)
-                    if (trip.lifecycleStatus != "ACTIVE") {
+
+                    // --- LOGICA PULSANTE START ---
+                    // Mostra "START TRIP NOW" SOLO se il viaggio NON è attivo e NON è finito (quindi solo se è PLANNED o DRAFT)
+                    if (trip.lifecycleStatus != "ACTIVE" && trip.lifecycleStatus != "FINISHED") {
                         Button(
                             onClick = onActivate,
                             modifier = Modifier
@@ -304,6 +345,15 @@ fun TripItem(
                         ) {
                             Text("START TRIP NOW")
                         }
+                    } else if (trip.lifecycleStatus == "FINISHED") {
+                        // Opzionale: Messaggio informativo per i viaggi finiti
+                        Text(
+                            text = "This trip is completed",
+                            modifier = Modifier.fillMaxWidth().padding(8.dp),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
                     }
                 }
             }

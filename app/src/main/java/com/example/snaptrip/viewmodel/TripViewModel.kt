@@ -465,51 +465,71 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
 
     // Activates a trip (Unlocks sensors)
     fun activateTrip(trip: TripResponse) {
-        // 1. Check if there is already an active trip
+        // CONTROLLO 1: Se è finito, blocca tutto
+        if (trip.lifecycleStatus == "FINISHED") {
+            _error.value = "You cannot reactivate a completed trip!"
+            return
+        }
+
+        // CONTROLLO 2: Se c'è già un altro viaggio attivo
         if (currentActiveTrip != null) {
-            _error.value = "You already have an active trip! End it before starting a new one."
+            _error.value = "You already have an active trip! Finish it before starting a new one."
             return
         }
 
         viewModelScope.launch {
             _isLoading.value = true
-
-            // Update local object
             trip.lifecycleStatus = "ACTIVE"
 
-            // Update Firestore -- We reuse saveTripToFirestore because it handles updates if ID exists
-            val result = repository.saveTripToFirestore(trip)
+            // Quando attivi, potresti voler ripartire da 0 o recuperare i passi salvati se era in pausa.
+            // Per semplicità, qui resettiamo il contatore live se inizia un nuovo viaggio.
+            _steps.value = 0
 
-            result.onSuccess {
-                loadUserTrips()  // Refresh list to show new status
-            }
-            result.onFailure {
-                _error.value = "Failed to activate trip: ${it.message}"
-            }
+            val result = repository.saveTripToFirestore(trip)
+            result.onSuccess { loadUserTrips() }
+            result.onFailure { _error.value = "Activation error: ${it.message}" }
             _isLoading.value = false
         }
     }
 
-    // End a trip (Move to Past)
-    fun endTrip(tripId: String) {
-        val trip = _userTrips.value.find { it.firestoreId == tripId } ?: return
 
+// End a trip (Move to Past)
+    fun endTrip(trip: TripResponse) {
+    // CONTROLLO DI SICUREZZA: Non fare nulla se il viaggio è già finito
+    if (trip.lifecycleStatus == "FINISHED") {
+        return // Esce silenziosamente dalla funzione
+    }
         viewModelScope.launch {
             _isLoading.value = true
-            trip.lifecycleStatus = "COMPLETED" // New Status
 
+            // 1. Prendi i passi accumulati nell'ultima sessione attiva (dal contatore live)
+            val finalSteps = _steps.value
+
+            // 2. Aggiorna l'oggetto TripResponse
+            trip.lifecycleStatus = "FINISHED"
+
+            // --- MODIFICA CHIAVE ---
+            // Somma i passi di questa sessione a quelli già salvati in precedenza.
+            // L'operatore (?: 0) gestisce il caso in cui i passi non siano mai stati inizializzati.
+            trip.steps = (trip.steps ?: 0) + finalSteps
+
+            // 3. Salva su Firestore e Room
             val result = repository.saveTripToFirestore(trip)
+
             result.onSuccess {
-                loadUserTrips() // Refresh list
-                // Optional: Stop sensors if we were tracking this trip
-                //hardResetStepCounterForTrip(tripId)
+                // Reset del contatore live, dato che non siamo più in viaggio
+                _steps.value = 0
+
+                loadUserTrips() // Aggiorna la lista dei viaggi
             }
-            result.onFailure { _error.value = "Failed to end trip: ${it.message}" }
+            result.onFailure {
+                _error.value = "Error terminating trip: ${it.message}"
+            }
 
             _isLoading.value = false
         }
     }
-    
+
     // FUNZIONI DI MODIFICA ITINERARIO
     //funzione per rimuovere un luogo dall'itinerario
     fun removePlace(dayIndex: Int, placeIndex: Int) {

@@ -17,19 +17,22 @@ data class TripRequest(
 // Risposta dal server e oggetto salvato su Firestore
 @Entity(tableName = "trips")
 data class TripResponse(
-    var status: String = "",
+    var status: String = "", // Stato della risposta API (es. "success")
     var trip_name: String = "",
     var weather: WeatherInfo? = null,
     var itinerary: List<DayItinerary> = ArrayList(),
     var error: String? = null,
     var coverPhoto: String? = null,
-    var lifecycleStatus: String = "DRAFT", // Trip Lifecycle Status (Default is DRAFT)
+    var lifecycleStatus: String = "DRAFT", // Valori possibili: "DRAFT", "PLANNED", "ACTIVE", "FINISHED"
+
+    // NUOVO CAMPO: Per salvare i passi finali (o correnti)
+    var steps: Int = 0,
 
     @PrimaryKey
-    //campo che contiene l'id del documento su Firestore che indica il viaggio
     @get:Exclude var firestoreId: String = ""
 ) {
-    constructor() : this("", "", null, ArrayList(), null, null, "DRAFT", "")
+    // Aggiorna il costruttore vuoto per includere il nuovo campo steps
+    constructor() : this("", "", null, ArrayList(), null, null, "DRAFT", 0, "")
 }
 
 data class WeatherInfo(

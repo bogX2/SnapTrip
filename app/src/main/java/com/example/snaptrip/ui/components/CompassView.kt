@@ -50,11 +50,11 @@ fun CompassDialog(
                 if (location != null) {
                     myLocation = location
                 } else {
-                    locationError = "GPS attivo ma nessuna posizione recente trovata."
+                    locationError = "Location not available, please active GPS."
                 }
             }
         } else {
-            locationError = "Permesso GPS mancante! Vai nelle impostazioni."
+            locationError = "GPS permission missing! Go to settings.."
             // Nota: In un'app reale qui dovresti lanciare la richiesta permessi (PermissionLauncher)
         }
     }
@@ -69,7 +69,7 @@ fun CompassDialog(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Navigazione verso", fontSize = 14.sp, color = Color.Gray)
+                Text("Navigation to", fontSize = 14.sp, color = Color.Gray)
                 Text(targetName, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black)
 
                 Spacer(modifier = Modifier.height(30.dp))
@@ -80,7 +80,7 @@ fun CompassDialog(
                         Text(locationError!!, color = Color.Red, fontSize = 12.sp)
                     } else {
                         CircularProgressIndicator()
-                        Text("Cercando segnale GPS...", fontSize = 12.sp, modifier = Modifier.padding(top=8.dp))
+                        Text("Searching GPS signal...", fontSize = 12.sp, modifier = Modifier.padding(top=8.dp))
                     }
                 } else {
                     // CALCOLO REALE CON GPS

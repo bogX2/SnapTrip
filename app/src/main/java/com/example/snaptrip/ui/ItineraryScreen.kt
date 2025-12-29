@@ -150,7 +150,9 @@ fun ItineraryScreen(
             )
         },
         floatingActionButton = {
-            if (!isEditing) {
+
+            // Il pulsante appare solo se NON sei in edit mode E se il viaggio è ancora una bozza.
+            if (!isEditing && tripResult?.lifecycleStatus == "DRAFT") {
                 ExtendedFloatingActionButton(
                     onClick = { viewModel.saveCurrentTrip() },
                     containerColor = MaterialTheme.colorScheme.primary,
