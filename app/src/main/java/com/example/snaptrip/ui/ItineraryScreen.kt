@@ -10,8 +10,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -31,7 +33,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.snaptrip.BuildConfig
 import com.example.snaptrip.data.model.PlaceDetail
-import com.example.snaptrip.ui.components.CompassDialog // Assicurati che questo import esista
+import com.example.snaptrip.ui.components.CompassDialog
+import com.example.snaptrip.viewmodel.SuggestionUiState
 import com.example.snaptrip.viewmodel.TripViewModel
 import kotlinx.coroutines.launch
 
@@ -41,20 +44,24 @@ fun ItineraryScreen(
     viewModel: TripViewModel,
     onBack: () -> Unit
 ) {
+    // ViewModel States
     val tripResult by viewModel.tripResult.collectAsState()
+    val suggestionState by viewModel.suggestionState.collectAsState()
     val saveSuccess by viewModel.saveSuccess.collectAsState()
     val error by viewModel.error.collectAsState()
+
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
     val isTripActive = tripResult?.lifecycleStatus == "ACTIVE"
 
+    // Local UI States
     var isEditing by remember { mutableStateOf(false) }
     var showMoveDialog by remember { mutableStateOf(false) }
     var moveSourceDayIndex by remember { mutableIntStateOf(-1) }
     var moveSourcePlaceIndex by remember { mutableIntStateOf(-1) }
 
-    // MODIFICA 1: Usiamo PlaceDetail perché è quello che usa la tua lista
+    // Compass State
     var selectedStopForCompass by remember { mutableStateOf<PlaceDetail?>(null) }
 
     val backgroundBrush = Brush.verticalGradient(
@@ -64,10 +71,19 @@ fun ItineraryScreen(
         )
     )
 
-    // MODIFICA 2: Mostra il Dialog se una tappa è selezionata
+    // --- SHAKE SENSOR MANAGEMENT ---
+    // We delegate the sensor lifecycle to the ViewModel to keep UI clean
+    DisposableEffect(Unit) {
+        viewModel.startShakeDetection()
+        onDispose {
+            viewModel.stopShakeDetection()
+        }
+    }
+
+    // --- DIALOGS & EFFECTS ---
+
+    // 1. Compass Dialog
     if (selectedStopForCompass != null) {
-        // Assumo che PlaceDetail abbia latitude e longitude.
-        // Se si chiamano "lat" e "lng", correggi qui sotto.
         CompassDialog(
             targetLat = selectedStopForCompass!!.lat,
             targetLon = selectedStopForCompass!!.lng,
@@ -76,6 +92,7 @@ fun ItineraryScreen(
         )
     }
 
+    // 2. Save Toast
     LaunchedEffect(saveSuccess) {
         if (saveSuccess) {
             Toast.makeText(context, "Trip saved successfully!", Toast.LENGTH_SHORT).show()
@@ -83,20 +100,21 @@ fun ItineraryScreen(
         }
     }
 
+    // 3. Error Toast
     LaunchedEffect(error) {
         if (error != null) {
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
-            // Clear the error immediately after showing it
             viewModel.clearError()
         }
     }
 
+    // 4. Move Place Dialog
     if (showMoveDialog && tripResult != null) {
         AlertDialog(
             onDismissRequest = { showMoveDialog = false },
             title = { Text("Move to another day") },
             text = {
-                Column {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     tripResult!!.itinerary.forEachIndexed { index, day ->
                         if (index != moveSourceDayIndex) {
                             TextButton(
@@ -119,6 +137,43 @@ fun ItineraryScreen(
         )
     }
 
+    // 5. AI Suggestions Dialog (Shake to Suggest)
+    when (val state = suggestionState) {
+        is SuggestionUiState.Loading -> {
+            AlertDialog(
+                onDismissRequest = { /* Do not dismiss while loading */ },
+                title = { Text("Asking AI Guide...") },
+                text = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(8.dp))
+                        Text("Finding new places for you...")
+                    }
+                },
+                confirmButton = {}
+            )
+        }
+        is SuggestionUiState.Success -> {
+            SuggestionDialog(
+                suggestions = state.suggestions, // Passing List<String>
+                onSelect = { selectedName -> viewModel.acceptSuggestion(selectedName) },
+                onDismiss = { viewModel.dismissSuggestions() }
+            )
+        }
+        is SuggestionUiState.Error -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissSuggestions() },
+                title = { Text("AI Error") },
+                text = { Text(state.message) },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.dismissSuggestions() }) { Text("Close") }
+                }
+            )
+        }
+        SuggestionUiState.Idle -> { /* Nothing to show */ }
+    }
+
+    // --- MAIN UI ---
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -150,8 +205,6 @@ fun ItineraryScreen(
             )
         },
         floatingActionButton = {
-
-            // Il pulsante appare solo se NON sei in edit mode E se il viaggio è ancora una bozza.
             if (!isEditing && tripResult?.lifecycleStatus == "DRAFT") {
                 ExtendedFloatingActionButton(
                     onClick = { viewModel.saveCurrentTrip() },
@@ -179,6 +232,7 @@ fun ItineraryScreen(
                 val pagerState = rememberPagerState(pageCount = { trip.itinerary.size })
 
                 Column(Modifier.fillMaxSize()) {
+                    // TAB ROW
                     ScrollableTabRow(
                         selectedTabIndex = pagerState.currentPage,
                         edgePadding = 16.dp,
@@ -209,6 +263,7 @@ fun ItineraryScreen(
                         }
                     }
 
+                    // PAGER CONTENT
                     HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
                         val places = trip.itinerary[page].places
 
@@ -230,7 +285,6 @@ fun ItineraryScreen(
                                         }
                                     )
                                 } else {
-                                    // MODIFICA 3: Passiamo la callback per aprire la bussola
                                     EnhancedTimelineItem(
                                         place = place,
                                         index = index,
@@ -251,6 +305,55 @@ fun ItineraryScreen(
             }
         }
     }
+}
+
+// Updated Suggestion Dialog (Strings)
+@Composable
+fun SuggestionDialog(
+    suggestions: List<String>,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("✨ AI Suggestions") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text("Shake detected! Gemini suggests:", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+
+                suggestions.forEach { placeName ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable { onSelect(placeName) },
+                        elevation = CardDefaults.cardElevation(4.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = placeName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Tap to add to itinerary",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
 
 @Composable
@@ -297,7 +400,6 @@ fun EditModeItem(
     }
 }
 
-// MODIFICA 4: Aggiunto parametro onNavigateClick
 @Composable
 fun EnhancedTimelineItem(
     place: PlaceDetail,
@@ -347,6 +449,7 @@ fun EnhancedTimelineItem(
         ) {
             Column {
                 if (place.photoReference != null) {
+                    // Use MAPS_API_KEY from BuildConfig
                     val photoUrl = "https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${place.photoReference}&key=${BuildConfig.MAPS_API_KEY}"
 
                     AsyncImage(
@@ -370,15 +473,13 @@ fun EnhancedTimelineItem(
                         }
                     }
 
-                    // MODIFICA 5: Indirizzo Cliccabile che apre la Bussola
                     Row(
                         modifier = Modifier
                             .padding(top = 8.dp)
-                            .clickable { onNavigateClick() } // CLICCA QUI PER BUSSOLA
-                            .padding(4.dp), // Aumenta area cliccabile
+                            .clickable { onNavigateClick() }
+                            .padding(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Cambiata icona in Explore per suggerire azione
                         Icon(
                             Icons.Default.Explore,
                             contentDescription = "Navigate",
@@ -389,7 +490,7 @@ fun EnhancedTimelineItem(
                         Text(
                             place.address ?: "Navigate to location",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary, // Colore Primary per indicare link
+                            color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1
                         )

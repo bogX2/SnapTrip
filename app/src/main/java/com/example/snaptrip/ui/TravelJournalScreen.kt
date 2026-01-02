@@ -664,6 +664,7 @@ fun AddJournalEntryDialog(tripName: String, onDismiss: () -> Unit, onConfirm: (S
                     originalBitmap!!,
                     tripName,
                     detectedTags // Passa i tag qui
+
                 )
             } else {
                 originalBitmap

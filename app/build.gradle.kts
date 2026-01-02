@@ -16,7 +16,7 @@ val localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {
     localProperties.load(FileInputStream(localPropertiesFile))
 }
-
+// Carica la chiave da local.properties
 
 android {
     namespace = "com.example.snaptrip"
@@ -37,6 +37,11 @@ android {
         buildConfigField("String", "MAPS_API_KEY", "\"${localProperties.getProperty("MAPS_API_KEY")}\"")
 
         buildConfigField("String", "OPENWEATHER_KEY", "\"${localProperties.getProperty("OPENWEATHER_API_KEY")}\"")
+
+        // 2. AGGIUNGI QUESTA PARTE PER GEMINI
+        buildConfigField("String", "GEMINI_API_KEY", "\"${localProperties.getProperty("GEMINI_API_KEY")}\"")
+
+
 
     }
 
@@ -108,6 +113,13 @@ dependencies {
 
     // ML Kit Image Labeling
     implementation("com.google.mlkit:image-labeling:17.0.7")
+
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+    // api gemini
+
+    // Utile per usare il Geocoder
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
+
 
 
     testImplementation(libs.junit)
