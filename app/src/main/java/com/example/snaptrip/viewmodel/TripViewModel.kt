@@ -31,7 +31,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.util.Collections
-
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.URL
 // UI State for Shake-to-Suggest feature
 sealed class SuggestionUiState {
     object Idle : SuggestionUiState()
@@ -53,7 +56,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
 
     // --- GEMINI & PLACES CONFIGURATION ---
     private val generativeModel = GenerativeModel(
-        modelName = "gemini-1.5-flash",
+        modelName = "gemini-2.5-flash",
         apiKey = BuildConfig.GEMINI_API_KEY
     )
     private val placesClient = Places.createClient(application)
@@ -199,43 +202,76 @@ class TripViewModel(application: Application) : AndroidViewModel(application), S
     }
 
     private fun fetchPlaceDetailsAndAdd(placeId: String, name: String) {
-        // Step B: Fetch details (Lat, Lng, Rating, Photo)
-        val placeFields = listOf(
-            Place.Field.ID,
-            Place.Field.NAME,
-            Place.Field.LAT_LNG,
-            Place.Field.ADDRESS,
-            Place.Field.RATING,
-            Place.Field.PHOTO_METADATAS
-        )
+        // Lanciamo una coroutine nel thread IO per fare la chiamata di rete
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val apiKey = BuildConfig.MAPS_API_KEY
 
-        val request = FetchPlaceRequest.newInstance(placeId, placeFields)
+                // 1. Costruiamo l'URL per la Web API "Details"
+                // Questa API ci restituisce il JSON con il campo "photo_reference" che ci serve
+                val urlString = "https://maps.googleapis.com/maps/api/place/details/json" +
+                        "?place_id=$placeId" +
+                        "&fields=name,formatted_address,geometry,rating,photos" +
+                        "&key=$apiKey"
 
-        placesClient.fetchPlace(request)
-            .addOnSuccessListener { response ->
-                val place = response.place
+                // 2. Eseguiamo la chiamata e leggiamo il testo
+                val jsonResult = URL(urlString).readText()
+                val jsonObject = JSONObject(jsonResult)
 
-                // Get Photo Reference (we store the string reference, UI handles loading via Places API or we just use a placeholder)
-                // Note: The `PlaceDetail` model expects a String? for photoReference.
-                // We use a marker string if metadata exists, actual loading usually requires a separate call in UI.
-                // For simplicity here, we assume if metadata exists, we can fetch it later.
-                val photoRef = if (place.photoMetadatas?.isNotEmpty() == true) "YES_PHOTO_AVAILABLE" else null
+                // 3. Controlliamo se è andata a buon fine
+                if (jsonObject.optString("status") == "OK") {
+                    val result = jsonObject.getJSONObject("result")
 
-                val newPlace = PlaceDetail(
-                    name = place.name ?: name,
-                    address = place.address,
-                    lat = place.latLng?.latitude ?: 0.0,
-                    lng = place.latLng?.longitude ?: 0.0,
-                    rating = place.rating,
-                    photoReference = photoRef
-                )
+                    // Estrazione Coordinate
+                    val geometry = result.optJSONObject("geometry")
+                    val location = geometry?.optJSONObject("location")
+                    val lat = location?.optDouble("lat") ?: 0.0
+                    val lng = location?.optDouble("lng") ?: 0.0
 
-                addPlaceToActiveTrip(newPlace)
+                    // Estrazione Photo Reference (LA PARTE IMPORTANTE)
+                    var photoRef: String? = null
+                    val photos = result.optJSONArray("photos")
+                    if (photos != null && photos.length() > 0) {
+                        // Prendi la prima foto disponibile e salvane il riferimento stringa
+                        photoRef = photos.getJSONObject(0).optString("photo_reference")
+                    }
+
+                    // Estrazione altri dati
+                    val actualName = result.optString("name") ?: name
+                    val address = result.optString("formatted_address")
+                    val rating = result.optDouble("rating", 0.0)
+
+                    // Creiamo l'oggetto PlaceDetail pronto per il DB
+                    val newPlace = PlaceDetail(
+                        name = actualName,
+                        address = address,
+                        lat = lat,
+                        lng = lng,
+                        rating = rating,
+                        photoReference = photoRef // Ora qui avrai la stringa lunga "AZLasH..."!
+                    )
+
+                    // 4. Torniamo al Thread Principale per aggiornare la UI e salvare
+                    withContext(Dispatchers.Main) {
+                        addPlaceToActiveTrip(newPlace)
+                    }
+                } else {
+                    // Gestione errore API Google
+                    withContext(Dispatchers.Main) {
+                        _error.value = "Google Maps Error: ${jsonObject.optString("status")}"
+                        _isLoading.value = false
+                    }
+                }
+
+            } catch (e: Exception) {
+                // Gestione crash di rete o parsing
+                withContext(Dispatchers.Main) {
+                    _error.value = "Network Error: ${e.localizedMessage}"
+                    _isLoading.value = false
+                }
+                e.printStackTrace()
             }
-            .addOnFailureListener {
-                _error.value = "Failed to fetch place details: ${it.message}"
-                _isLoading.value = false
-            }
+        }
     }
 
     private fun addPlaceToActiveTrip(place: PlaceDetail) {
