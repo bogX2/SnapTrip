@@ -3,7 +3,6 @@ package com.example.snaptrip.ui
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
-import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Base64
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,7 +30,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -52,14 +49,11 @@ import java.util.Locale
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.res.painterResource
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.widget.Toast
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -332,11 +326,11 @@ fun TravelJournalScreen(
                 FullScreenImage(
                     entry = selectedEntry!!,
                     onDismiss = { selectedEntry = null },
-                    onEdit = { 
+                    //onEdit = {
                         // Qui potresti riaprire il dialog di aggiunta precompilato per la modifica
                         // Per ora chiudiamo solo la visualizzazione full screen
                         // (La modifica completa richiederebbe di passare l'entry al dialog)
-                    }
+                    //}
                 )
             }
         }
@@ -520,7 +514,7 @@ fun JournalGridItem(entry: JournalEntry, onClick: () -> Unit) {
 }
 
 @Composable
-fun FullScreenImage(entry: JournalEntry, onDismiss: () -> Unit, onEdit: () -> Unit) {
+fun FullScreenImage(entry: JournalEntry, onDismiss: () -> Unit) {
     // Box che copre tutto lo schermo
     Box(
         modifier = Modifier
@@ -617,14 +611,7 @@ fun FullScreenImage(entry: JournalEntry, onDismiss: () -> Unit, onEdit: () -> Un
 
             Spacer(Modifier.height(32.dp))
 
-            Button(
-                onClick = onEdit,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Edit Note")
-            }
+
         }
     }
 }

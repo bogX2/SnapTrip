@@ -17,7 +17,7 @@ class ShakeDetector(context: Context, private val onShake: () -> Unit) : SensorE
 
     private var lastShakeTime: Long = 0
     // Manteniamo i tuoi valori di soglia che funzionavano bene
-    private val SHAKE_THRESHOLD_GRAVITY = 1.4F
+    private val SHAKE_THRESHOLD_GRAVITY = 2.3F
     private val SHAKE_SLOP_TIME_MS = 1000
 
     // Modifica 3: Metodo start() chiamato dal ViewModel
